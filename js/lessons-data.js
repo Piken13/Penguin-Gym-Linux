@@ -50,6 +50,16 @@ const LESSON_CATEGORIES = [
     "icon": "🗄️"
   },
   {
+    "id": "automation-bash",
+    "label": "Auto Bash",
+    "icon": "🤖"
+  },
+  {
+    "id": "ansible",
+    "label": "Ansible",
+    "icon": "⚙️"
+  },
+  {
     "id": "incidents",
     "label": "Incidentes",
     "icon": "🚨"
@@ -4647,6 +4657,551 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "auto-bash-hello",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Seu primeiro robô com Shebang (#!/bin/bash)",
+    "description": "Todo script de automação começa com a linha `#!/bin/bash` (shebang) para indicar qual interpretador deve executá-lo.\nCrie `organiza.sh` contendo `#!/bin/bash` e `echo \"Iniciando automacao...\"`, torne-o executável com `chmod +x organiza.sh` e rode `./organiza.sh`.",
+    "hint": "Use `printf '#!/bin/bash\\necho \"Iniciando automacao...\"\\n' > organiza.sh && chmod +x organiza.sh && ./organiza.sh` (ou edite com `nano organiza.sh`).",
+    "answer": "printf '#!/bin/bash\\necho \"Iniciando automacao...\"\\n' > organiza.sh && chmod +x organiza.sh && ./organiza.sh",
+    "answerSteps": [
+      "printf '#!/bin/bash\\necho \"Iniciando automacao...\"\\n' > organiza.sh",
+      "chmod +x organiza.sh",
+      "./organiza.sh"
+    ],
+    "relatedCommands": [
+      "nano",
+      "chmod",
+      "bash"
+    ]
+  },
+  {
+    "id": "auto-bash-vars-date",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Nomes dinâmicos com variáveis e $(date)",
+    "description": "Em automações diárias, gerar arquivos com data automática evita sobrescrever relatórios anteriores.\nCrie a pasta `~/logs` e gere um arquivo com a data de hoje usando `$(date +%Y-%m-%d)` chamado `relatorio_<DATA>.log` dentro de `~/logs/`.",
+    "hint": "Execute `mkdir -p ~/logs && echo \"Status OK\" > ~/logs/relatorio_$(date +%Y-%m-%d).log`",
+    "answer": "mkdir -p ~/logs && echo \"Status OK\" > ~/logs/relatorio_$(date +%Y-%m-%d).log",
+    "answerSteps": [
+      "mkdir -p ~/logs",
+      "echo \"Status OK\" > ~/logs/relatorio_$(date +%Y-%m-%d).log"
+    ],
+    "relatedCommands": [
+      "date",
+      "mkdir",
+      "echo"
+    ]
+  },
+  {
+    "id": "auto-bash-logging",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Gravar saída e erros em log automático (>> e 2>&1)",
+    "description": "Scripts agendados rodam sem ninguém olhando a tela: se não registrarem saída e erros em arquivo, falhas passam despercebidas.\nExecute `./rotina.sh` acumulando tanto stdout quanto stderr em `automacao.log` (`>> automacao.log 2>&1`).",
+    "hint": "Execute `./rotina.sh >> automacao.log 2>&1`",
+    "answer": "./rotina.sh >> automacao.log 2>&1",
+    "answerSteps": [
+      "./rotina.sh >> automacao.log 2>&1"
+    ],
+    "relatedCommands": [
+      "cat",
+      "tail",
+      "logger"
+    ]
+  },
+  {
+    "id": "auto-bash-prep-dirs",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Criar pastas de organização de uma vez ({...})",
+    "description": "Antes de um script organizar sua pasta `downloads/`, ele deve garantir que os diretórios de destino existam.\nCrie de uma única vez `downloads/imagens`, `downloads/documentos` e `downloads/arquivos` usando expansão de chaves.",
+    "hint": "Execute `mkdir -p downloads/{imagens,documentos,arquivos}`",
+    "answer": "mkdir -p downloads/{imagens,documentos,arquivos}",
+    "answerSteps": [
+      "mkdir -p downloads/{imagens,documentos,arquivos}"
+    ],
+    "relatedCommands": [
+      "mkdir",
+      "tree",
+      "ls"
+    ]
+  },
+  {
+    "id": "auto-bash-glob-move",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Triagem automática em lote por extensão (Globbing)",
+    "description": "A pasta `downloads/` está misturada com `.pdf`, `.jpg`, `.png` e `.zip`.\nMova todos os `.pdf` para `downloads/documentos/` e todas as imagens (`.jpg` e `.png`) para `downloads/imagens/` usando padrões `*`.",
+    "hint": "Execute `mv downloads/*.pdf downloads/documentos/ && mv downloads/*.jpg downloads/*.png downloads/imagens/`",
+    "answer": "mv downloads/*.pdf downloads/documentos/ && mv downloads/*.jpg downloads/*.png downloads/imagens/",
+    "answerSteps": [
+      "mv downloads/*.pdf downloads/documentos/",
+      "mv downloads/*.jpg downloads/*.png downloads/imagens/"
+    ],
+    "relatedCommands": [
+      "mv",
+      "ls",
+      "find"
+    ]
+  },
+  {
+    "id": "auto-bash-organizer-script",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Script organizador com laço for e condicional [ -f ]",
+    "description": "Em vez de digitar `mv` todo dia, transforme a triagem em um script executável!\nCrie `organizar_downloads.sh` com um laço `for` e teste `[ -f \"$f\" ]` para mover `.pdf` para `downloads/documentos/` e `.png` para `downloads/imagens/`. Dê `+x` e execute `./organizar_downloads.sh`.",
+    "hint": "Crie `organizar_downloads.sh` usando `for f in downloads/*.pdf; do if [ -f \"$f\" ]; then mv \"$f\" downloads/documentos/; fi; done` (e outro para `.png`), depois `chmod +x organizar_downloads.sh && ./organizar_downloads.sh`.",
+    "answer": "printf '#!/bin/bash\\nfor f in downloads/*.pdf; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/documentos/\\n  fi\\ndone\\nfor f in downloads/*.png; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/imagens/\\n  fi\\ndone\\n' > organizar_downloads.sh && chmod +x organizar_downloads.sh && ./organizar_downloads.sh",
+    "answerSteps": [
+      "printf '#!/bin/bash\\nfor f in downloads/*.pdf; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/documentos/\\n  fi\\ndone\\nfor f in downloads/*.png; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/imagens/\\n  fi\\ndone\\n' > organizar_downloads.sh",
+      "chmod +x organizar_downloads.sh",
+      "./organizar_downloads.sh"
+    ],
+    "relatedCommands": [
+      "nano",
+      "chmod",
+      "mv"
+    ]
+  },
+  {
+    "id": "auto-bash-cleanup-tmp",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Faxina automática e segura de temporários (*.tmp)",
+    "description": "Em scripts de limpeza, evite `rm -rf` genérico: filtre exatamente o tipo de arquivo descartável antes de apagar.\nRemova apenas arquivos `.tmp` dentro de `downloads/` preservando `importante.txt`.",
+    "hint": "Execute `find downloads -type f -name \"*.tmp\" -delete`",
+    "answer": "find downloads -type f -name \"*.tmp\" -delete",
+    "answerSteps": [
+      "find downloads -type f -name \"*.tmp\" -delete"
+    ],
+    "relatedCommands": [
+      "find",
+      "rm",
+      "ls"
+    ]
+  },
+  {
+    "id": "auto-bash-rsync-local",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Espelhamento incremental local com rsync -av",
+    "description": "Diferente de `cp -r` que recopia tudo sempre, o `rsync` analisa diferenças e transfere apenas arquivos novos ou modificados.\nEspelhe o conteúdo de `documents/` para `backups/documents/` usando `rsync -av`.",
+    "hint": "Execute `rsync -av documents/ backups/documents/`",
+    "answer": "rsync -av documents/ backups/documents/",
+    "answerSteps": [
+      "rsync -av documents/ backups/documents/"
+    ],
+    "relatedCommands": [
+      "rsync",
+      "ls",
+      "cp"
+    ]
+  },
+  {
+    "id": "auto-bash-rsync-dryrun",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Simular backup destrutivo com --dry-run (-n) antes de aplicar",
+    "description": "A opção `--delete` remove do destino arquivos que não existem mais na origem — perigosa sem revisão prévia! A pasta `backups/documents/` possui `obsoleto.txt`.\nSimule `rsync --delete` com `-n` (`--dry-run`) para conferir o que seria apagado sem apagar nada ainda.",
+    "hint": "Execute `rsync -avn --delete documents/ backups/documents/`",
+    "answer": "rsync -avn --delete documents/ backups/documents/",
+    "answerSteps": [
+      "rsync -avn --delete documents/ backups/documents/"
+    ],
+    "relatedCommands": [
+      "rsync",
+      "ls"
+    ]
+  },
+  {
+    "id": "auto-bash-backup-tar-verify",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Backup compactado validando código de retorno (&&)",
+    "description": "Um bom script de backup nunca assume que deu certo: ele valida o status de retorno (`0`) antes de registrar sucesso.\nCrie/execute `backup.sh` compactando `documents` em `backups/docs_backup.tar.gz` com `tar -czf` e só exiba `Backup OK` se o `tar` tiver sucesso.",
+    "hint": "Execute `printf '#!/bin/bash\\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\\n' > backup.sh && chmod +x backup.sh && ./backup.sh`",
+    "answer": "printf '#!/bin/bash\\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\\n' > backup.sh && chmod +x backup.sh && ./backup.sh",
+    "answerSteps": [
+      "printf '#!/bin/bash\\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\\n' > backup.sh",
+      "chmod +x backup.sh",
+      "./backup.sh"
+    ],
+    "relatedCommands": [
+      "tar",
+      "chmod",
+      "echo"
+    ]
+  },
+  {
+    "id": "auto-bash-disk-alert",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Sentinela de disco com df, awk e condicional -gt",
+    "description": "Scripts de monitoramento tomam decisões lendo métricas do sistema.\nNo simulador, a partição `/` está em `24%` de uso. Crie e rode `checa_disco.sh` extraindo esse percentual (`df -h / | awk '/sda1/ {print $5}' | tr -d '%'`) e imprimindo `ALERTA: Disco alto` quando for maior que `20` (`-gt 20`).",
+    "hint": "Use `printf '#!/bin/bash\\nUSO=$(df -h / | awk '''/sda1/ {print $5}''' | tr -d '''%''')\\nif [ \"$USO\" -gt 20 ]; then\\n  echo \"ALERTA: Disco alto (${USO}%%)\"\\nfi\\n' > checa_disco.sh && chmod +x checa_disco.sh && ./checa_disco.sh`",
+    "answer": "printf '#!/bin/bash\\nUSO=$(df -h / | awk '\\''/sda1/ {print $5}'\\'' | tr -d '\\''%'\\'')\\nif [ \"$USO\" -gt 20 ]; then\\n  echo \"ALERTA: Disco alto (${USO}%%)\"\\nfi\\n' > checa_disco.sh && chmod +x checa_disco.sh && ./checa_disco.sh",
+    "answerSteps": [
+      "printf '#!/bin/bash\\nUSO=$(df -h / | awk '\\''/sda1/ {print $5}'\\'' | tr -d '\\''%'\\'')\\nif [ \"$USO\" -gt 20 ]; then\\n  echo \"ALERTA: Disco alto (${USO}%%)\"\\nfi\\n' > checa_disco.sh",
+      "chmod +x checa_disco.sh",
+      "./checa_disco.sh"
+    ],
+    "relatedCommands": [
+      "df",
+      "awk",
+      "test"
+    ]
+  },
+  {
+    "id": "auto-bash-service-watchdog",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Autocorreção (Watchdog) de serviço com systemctl",
+    "description": "O serviço `nginx` caiu! Em vez de acordar às 3h da manhã, automações de health-check verificam se o serviço está ativo e o reiniciam automaticamente em caso de falha (`||`).\nCrie `watchdog.sh` com `systemctl is-active nginx || sudo systemctl start nginx` e execute `./watchdog.sh` para recuperar o Nginx.",
+    "hint": "Execute `printf '#!/bin/bash\\nsystemctl is-active nginx || sudo systemctl start nginx\\n' > watchdog.sh && chmod +x watchdog.sh && ./watchdog.sh`",
+    "answer": "printf '#!/bin/bash\\nsystemctl is-active nginx || sudo systemctl start nginx\\n' > watchdog.sh && chmod +x watchdog.sh && ./watchdog.sh",
+    "answerSteps": [
+      "printf '#!/bin/bash\\nsystemctl is-active nginx || sudo systemctl start nginx\\n' > watchdog.sh",
+      "chmod +x watchdog.sh",
+      "./watchdog.sh"
+    ],
+    "relatedCommands": [
+      "systemctl",
+      "chmod",
+      "journalctl"
+    ]
+  },
+  {
+    "id": "auto-bash-cron-schedule",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Agendar execução diária automática no crontab",
+    "description": "O `cron` usa 5 campos antes do comando: `minuto hora dia mês dia_da_semana`.\nAgende `/home/user/organizar_downloads.sh` para rodar todos os dias às `02:30` (`30 2 * * *`), redirecionando logs para `/home/user/cron.log` (`>> ... 2>&1`).",
+    "hint": "Você pode editar via `crontab -e` ou instalar via pipe: `printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab -`",
+    "answer": "printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab - && crontab -l",
+    "answerSteps": [
+      "printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab -",
+      "crontab -l"
+    ],
+    "relatedCommands": [
+      "crontab",
+      "logger",
+      "chmod"
+    ]
+  },
+  {
+    "id": "auto-bash-boss-pipeline",
+    "category": "automation-bash",
+    "categoryLabel": "Auto Bash",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "🏆 Projeto Final Bash: Rotina Noturna Autônoma",
+    "description": "Combine tudo em um único robô `rotina_noturna.sh` que: 1) move `.pdf` de `downloads/` para `downloads/documentos/`, 2) apaga `.tmp` em `downloads/`, 3) sincroniza `documents/` em `backups/documents/` com `rsync -a`, e 4) registra `Rotina OK` em `rotina.log`.\nCrie, execute `./rotina_noturna.sh` e agende às `03:00` no crontab!",
+    "hint": "Monte `rotina_noturna.sh`, dê `chmod +x`, execute `./rotina_noturna.sh` e grave `0 3 * * * /home/user/rotina_noturna.sh` no `crontab`.",
+    "answer": "printf '#!/bin/bash\\nmv downloads/*.pdf downloads/documentos/\\nfind downloads -type f -name \"*.tmp\" -delete\\nrsync -a documents/ backups/documents/\\necho \"Rotina OK\" >> rotina.log\\n' > rotina_noturna.sh && chmod +x rotina_noturna.sh && ./rotina_noturna.sh && printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -",
+    "answerSteps": [
+      "printf '#!/bin/bash\\nmv downloads/*.pdf downloads/documentos/\\nfind downloads -type f -name \"*.tmp\" -delete\\nrsync -a documents/ backups/documents/\\necho \"Rotina OK\" >> rotina.log\\n' > rotina_noturna.sh",
+      "chmod +x rotina_noturna.sh",
+      "./rotina_noturna.sh",
+      "printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -"
+    ],
+    "relatedCommands": [
+      "rsync",
+      "crontab",
+      "find"
+    ]
+  },
+  {
+    "id": "ansible-ssh-prep",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "A base do Ansible: gerar par de chaves SSH",
+    "description": "Ao contrário de outras ferramentas, o Ansible não exige instalar agentes nos servidores — ele opera sobre **SSH**! Por isso, o primeiro passo do controlador é ter um par de chaves criptográficas em `~/.ssh/`.\nGere uma chave Ed25519 usando `ssh-keygen -t ed25519`.",
+    "hint": "Execute `ssh-keygen -t ed25519`",
+    "answer": "ssh-keygen -t ed25519",
+    "answerSteps": [
+      "ssh-keygen -t ed25519"
+    ],
+    "relatedCommands": [
+      "ssh-keygen",
+      "ssh",
+      "ls"
+    ]
+  },
+  {
+    "id": "ansible-inventory-ini",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Criar arquivo de Inventário INI (inventory.ini)",
+    "description": "O inventário diz ao Ansible quais servidores existem e como se agrupam por função.\nCrie `inventory.ini` no diretório atual definindo o grupo `[webservers]` com `web1` e `web2`, e o grupo `[databases]` com `db1`.",
+    "hint": "Use `printf '[webservers]\\nweb1\\nweb2\\n\\n[databases]\\ndb1\\n' > inventory.ini` (ou edite com `nano inventory.ini`).",
+    "answer": "printf '[webservers]\\nweb1\\nweb2\\n\\n[databases]\\ndb1\\n' > inventory.ini",
+    "answerSteps": [
+      "printf '[webservers]\\nweb1\\nweb2\\n\\n[databases]\\ndb1\\n' > inventory.ini"
+    ],
+    "relatedCommands": [
+      "ansible",
+      "nano",
+      "cat"
+    ]
+  },
+  {
+    "id": "ansible-adhoc-ping",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Testar conectividade na frota com -m ping",
+    "description": "O módulo `ping` do Ansible não envia ICMP de rede: ele valida conexão SSH, autenticação e disponibilidade do Python nos hosts do inventário, retornando `pong`.\nTeste todos os servidores (`all`) usando `inventory.ini`.",
+    "hint": "Execute `ansible all -i inventory.ini -m ping`",
+    "answer": "ansible all -i inventory.ini -m ping",
+    "answerSteps": [
+      "ansible all -i inventory.ini -m ping"
+    ],
+    "relatedCommands": [
+      "ansible",
+      "ssh-keygen"
+    ]
+  },
+  {
+    "id": "ansible-adhoc-shell",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Rodar comandos ad-hoc em grupo de servidores (-m shell)",
+    "description": "Para checagens rápidas sem precisar abrir SSH servidor por servidor, o modo *ad-hoc* executa um comando em todo um grupo de uma vez.\nVerifique `uptime && df -h` somente no grupo `webservers` (`web1` e `web2`).",
+    "hint": "Execute `ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\"`",
+    "answer": "ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\"",
+    "answerSteps": [
+      "ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\""
+    ],
+    "relatedCommands": [
+      "ansible",
+      "df",
+      "uptime"
+    ]
+  },
+  {
+    "id": "ansible-facts-setup",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Coletar metadados do sistema (Facts) com -m setup",
+    "description": "Antes de aplicar regras, o Ansible coleta automaticamente informações do sistema operacional, IP e memória de cada host (chamadas de **Facts**).\nInspecione os fatos do servidor `db1` usando o módulo `setup`.",
+    "hint": "Execute `ansible db1 -i inventory.ini -m setup`",
+    "answer": "ansible db1 -i inventory.ini -m setup",
+    "answerSteps": [
+      "ansible db1 -i inventory.ini -m setup"
+    ],
+    "relatedCommands": [
+      "ansible"
+    ]
+  },
+  {
+    "id": "ansible-adhoc-copy",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Distribuir arquivo e permissão para os servidores (-m copy)",
+    "description": "O arquivo local `index.html` precisa ir para `/var/www/html/index.html` com permissão `0644` em todos os `webservers`. Como escreve em `/var/`, use `--become` (`-b`) para elevar privilégio.\nEnvie o arquivo com `-m copy`.",
+    "hint": "Execute `ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\"`",
+    "answer": "ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\"",
+    "answerSteps": [
+      "ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\""
+    ],
+    "relatedCommands": [
+      "ansible",
+      "scp"
+    ]
+  },
+  {
+    "id": "ansible-adhoc-apt-service",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Instalar pacote (-m apt) e iniciar serviço (-m service) com -b",
+    "description": "Em vez de enviar `apt install` via shell bruto, módulos declarativos garantem o estado final desejado sem erro se já estiver instalado.\nEm `webservers`, instale `nginx` (`state=present`) e inicie/habilite o serviço (`state=started enabled=yes`) usando `-b`.",
+    "hint": "Execute `ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\" && ansible webservers -i inventory.ini -b -m service -a \"name=nginx state=started enabled=yes\"`",
+    "answer": "ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\" && ansible webservers -i inventory.ini -b -m service -a \"name=nginx state=started enabled=yes\"",
+    "answerSteps": [
+      "ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\"",
+      "ansible webservers -i inventory.ini -b -m service -a \"name=nginx state=started enabled=yes\""
+    ],
+    "relatedCommands": [
+      "ansible",
+      "apt",
+      "systemctl"
+    ]
+  },
+  {
+    "id": "ansible-first-playbook",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Escrever e executar seu primeiro Playbook YAML (webserver.yml)",
+    "description": "Comandos ad-hoc são pontuais; **Playbooks YAML** transformam infraestrutura em código reutilizável e versionado no Git.\nCrie `webserver.yml` declarando `hosts: webservers`, `become: yes` e duas `tasks` (`apt` para `nginx` e `service` para iniciar/habilitar `nginx`), e rode com `ansible-playbook`.",
+    "hint": "Crie `webserver.yml` e execute `ansible-playbook -i inventory.ini webserver.yml`.",
+    "answer": "printf '%s\\n' '- name: Configurar servidores web' '  hosts: webservers' '  become: yes' '  tasks:' '    - name: Instalar nginx' '      apt: name=nginx state=present' '    - name: Iniciar nginx' '      service: name=nginx state=started enabled=yes' > webserver.yml && ansible-playbook -i inventory.ini webserver.yml",
+    "answerSteps": [
+      "printf '%s\\n' '- name: Configurar servidores web' '  hosts: webservers' '  become: yes' '  tasks:' '    - name: Instalar nginx' '      apt: name=nginx state=present' '    - name: Iniciar nginx' '      service: name=nginx state=started enabled=yes' > webserver.yml",
+      "ansible-playbook -i inventory.ini webserver.yml"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "nano",
+      "cat"
+    ]
+  },
+  {
+    "id": "ansible-idempotency-check",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Comprovar Idempotência na prática (changed=0)",
+    "description": "Em Bash, rodar um script duas vezes pode duplicar linhas ou falhar. No Ansible, **idempotência** garante que se o servidor já está no estado desejado (`webserver.yml` já aplicado), rodar de novo resulta em `changed=0` e tudo `ok`.\nExecute `webserver.yml` novamente e confira o `PLAY RECAP`!",
+    "hint": "Execute `ansible-playbook -i inventory.ini webserver.yml`",
+    "answer": "ansible-playbook -i inventory.ini webserver.yml",
+    "answerSteps": [
+      "ansible-playbook -i inventory.ini webserver.yml"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "cat"
+    ]
+  },
+  {
+    "id": "ansible-check-diff",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Simular alterações em segurança com --check --diff",
+    "description": "Antes de aplicar `deploy.yml` em produção, faça um ensaio (*dry-run*) para ver exatamente quais linhas mudariam sem alterar nenhum servidor.\nExecute `ansible-playbook` com `--check` e `--diff`.",
+    "hint": "Execute `ansible-playbook -i inventory.ini deploy.yml --check --diff`",
+    "answer": "ansible-playbook -i inventory.ini deploy.yml --check --diff",
+    "answerSteps": [
+      "ansible-playbook -i inventory.ini deploy.yml --check --diff"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "diff"
+    ]
+  },
+  {
+    "id": "ansible-vars-lineinfile",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Variáveis YAML (vars) e edição segura com lineinfile",
+    "description": "Usar `echo ... >> /etc/app.conf` em Bash duplica linhas toda vez que roda. O módulo `lineinfile` insere a linha somente se ainda não existir, usando variáveis como `{{ app_env }}`.\nInspecione `cat vars_app.yml` e execute o playbook nos servidores.",
+    "hint": "Execute `ansible-playbook -i inventory.ini vars_app.yml`",
+    "answer": "ansible-playbook -i inventory.ini vars_app.yml",
+    "answerSteps": [
+      "cat vars_app.yml",
+      "ansible-playbook -i inventory.ini vars_app.yml"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "cat"
+    ]
+  },
+  {
+    "id": "ansible-handlers-notify",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Reiniciar serviço somente se houver mudança (notify/handlers)",
+    "description": "Reiniciar o Nginx à toa derruba conexões abertas! O bloco `handlers:` só executa quando uma tarefa com `notify:` realmente muda algo (`changed=true`).\nInspecione `nginx_config.yml` e execute o playbook para disparar o handler `Restart nginx`.",
+    "hint": "Execute `ansible-playbook -i inventory.ini nginx_config.yml`",
+    "answer": "ansible-playbook -i inventory.ini nginx_config.yml",
+    "answerSteps": [
+      "cat nginx_config.yml",
+      "ansible-playbook -i inventory.ini nginx_config.yml"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "cat"
+    ]
+  },
+  {
+    "id": "ansible-loop-when",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Evitar repetição com loop e filtrar hosts com when",
+    "description": "O arquivo `loop_when.yml` instala `curl`, `htop` e `jq` via `loop:` em toda a frota, mas libera a porta 80 no `ufw` **apenas** `when: inventory_hostname in groups['webservers']` (pulando `db1` como `skipping`).\nExecute o playbook para observar esse comportamento!",
+    "hint": "Execute `ansible-playbook -i inventory.ini loop_when.yml`",
+    "answer": "ansible-playbook -i inventory.ini loop_when.yml",
+    "answerSteps": [
+      "cat loop_when.yml",
+      "ansible-playbook -i inventory.ini loop_when.yml"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "ufw",
+      "cat"
+    ]
+  },
+  {
+    "id": "ansible-boss-deploy",
+    "category": "ansible",
+    "categoryLabel": "Ansible",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "🏆 Projeto Final Ansible: Stack Multi-Host Idempotente",
+    "description": "O playbook `infra.yml` provisiona toda a arquitetura (`web1`, `web2` e `db1`): usuário `deploy`, pacotes base, Nginx, config com handler, página HTML e firewall.\nExecute `infra.yml` **duas vezes**: na 1ª aplica toda a infraestrutura (`changed > 0`), e na 2ª comprova idempotência total (`changed=0` e `failed=0`)!",
+    "hint": "Execute `ansible-playbook -i inventory.ini infra.yml && ansible-playbook -i inventory.ini infra.yml`",
+    "answer": "ansible-playbook -i inventory.ini infra.yml && ansible-playbook -i inventory.ini infra.yml",
+    "answerSteps": [
+      "ansible-playbook -i inventory.ini infra.yml",
+      "ansible-playbook -i inventory.ini infra.yml"
+    ],
+    "relatedCommands": [
+      "ansible-playbook",
+      "ansible",
+      "cat"
+    ]
+  },
+  {
     "id": "inc-nginx-404",
     "category": "incidents",
     "categoryLabel": "Incidentes",
@@ -4765,3 +5320,4 @@ const ALL_LESSONS = [
     ]
   }
 ];
+

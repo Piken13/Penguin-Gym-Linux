@@ -173,6 +173,7 @@ class LessonChecker {
     }
 
     const { git, docker, sql, commandEngine } = ctx || {};
+    const ansible = (ctx && ctx.ansible) || (commandEngine && commandEngine.ansible);
 
     switch (id) {
       // ==========================================
@@ -1115,7 +1116,247 @@ class LessonChecker {
         return hasCall(allCalls, 'sqlite3') && /avg\s*\(\s*monthly_fee\s*\)/i.test(raw) && output.includes('3333.33');
 
       // ==========================================
-      // 11. INCIDENTES / BOSS CROSS-DOMAIN (5+ lições)
+      // 11. AUTOMAÇÃO BASH (14 lições)
+      // ==========================================
+      case 'auto-bash-hello': {
+        const scr = fs.getNode('/home/user/organiza.sh');
+        return !!scr &&
+               (scr.content || '').includes('#!/bin/bash') &&
+               scr.permissions.includes('x') &&
+               (raw.includes('./organiza.sh') || raw.includes('organiza.sh')) &&
+               output.includes('Iniciando automacao');
+      }
+
+      case 'auto-bash-vars-date': {
+        const logsDir = fs.getNode('/home/user/logs');
+        if (!logsDir || logsDir.type !== 'directory') return false;
+        const hasDatedFile = Object.keys(logsDir.children || {}).some(k => /^relatorio_\d{4}-\d{2}-\d{2}\.log$/.test(k));
+        return hasDatedFile && (raw.includes('$(date') || allSessionText.includes('$(date'));
+      }
+
+      case 'auto-bash-logging': {
+        const logNode = fs.getNode('/home/user/automacao.log');
+        const txt = (logNode && logNode.content) || '';
+        return (raw.includes('>>') || allSessionText.includes('>>')) &&
+               (raw.includes('2>&1') || raw.includes('&>') || allSessionText.includes('2>&1') || allSessionText.includes('&>')) &&
+               !!logNode &&
+               txt.includes('Executando tarefa automatica') &&
+               txt.includes('Permissão negada');
+      }
+
+      case 'auto-bash-prep-dirs':
+        return ['imagens', 'documentos', 'arquivos'].every(sub => {
+          const d = fs.getNode(`/home/user/downloads/${sub}`);
+          return !!d && d.type === 'directory';
+        });
+
+      case 'auto-bash-glob-move':
+        return fs.getNode('/home/user/downloads/documentos/fatura.pdf') !== null &&
+               fs.getNode('/home/user/downloads/documentos/contrato.pdf') !== null &&
+               fs.getNode('/home/user/downloads/imagens/foto1.jpg') !== null &&
+               fs.getNode('/home/user/downloads/imagens/logo.png') !== null &&
+               fs.getNode('/home/user/downloads/fatura.pdf') === null &&
+               fs.getNode('/home/user/downloads/foto1.jpg') === null;
+
+      case 'auto-bash-organizer-script': {
+        const scr = fs.getNode('/home/user/organizar_downloads.sh');
+        const content = (scr && scr.content) || '';
+        return !!scr &&
+               scr.permissions.includes('x') &&
+               content.includes('for') &&
+               content.includes('if') &&
+               fs.getNode('/home/user/downloads/documentos/manual.pdf') !== null &&
+               fs.getNode('/home/user/downloads/documentos/guia.pdf') !== null &&
+               fs.getNode('/home/user/downloads/imagens/banner.png') !== null &&
+               fs.getNode('/home/user/downloads/manual.pdf') === null &&
+               fs.getNode('/home/user/downloads/banner.png') === null &&
+               fs.getNode('/home/user/downloads/temp.tmp') !== null;
+      }
+
+      case 'auto-bash-cleanup-tmp':
+        return (hasCall(allCalls, 'find') || hasCall(allCalls, 'rm')) &&
+               fs.getNode('/home/user/downloads/cache1.tmp') === null &&
+               fs.getNode('/home/user/downloads/cache2.tmp') === null &&
+               fs.getNode('/home/user/downloads/importante.txt') !== null;
+
+      case 'auto-bash-rsync-local':
+        return hasCall(allCalls, 'rsync') &&
+               fs.getNode('/home/user/backups/documents/readme.txt') !== null &&
+               fs.getNode('/home/user/backups/documents/notes.txt') !== null;
+
+      case 'auto-bash-rsync-dryrun':
+        return effCmd === 'rsync' &&
+               (LessonChecker.hasShortFlag(effArgs, 'n', '--dry-run')) &&
+               effArgs.includes('--delete') &&
+               output.includes('DRY RUN') &&
+               output.includes('obsoleto.txt') &&
+               fs.getNode('/home/user/backups/documents/obsoleto.txt') !== null;
+
+      case 'auto-bash-backup-tar-verify': {
+        const scr = fs.getNode('/home/user/backup.sh');
+        const tarNode = fs.getNode('/home/user/backups/docs_backup.tar.gz');
+        return !!scr && scr.permissions.includes('x') && !!tarNode && output.includes('Backup OK');
+      }
+
+      case 'auto-bash-disk-alert': {
+        const scr = fs.getNode('/home/user/checa_disco.sh');
+        const content = (scr && scr.content) || '';
+        return !!scr && scr.permissions.includes('x') &&
+               content.includes('df') && content.includes('if') &&
+               output.includes('ALERTA: Disco alto');
+      }
+
+      case 'auto-bash-service-watchdog': {
+        const scr = fs.getNode('/home/user/watchdog.sh');
+        const content = (scr && scr.content) || '';
+        return !!scr && scr.permissions.includes('x') &&
+               content.includes('systemctl') &&
+               (commandEngine ? commandEngine.services.nginx.active === true : true);
+      }
+
+      case 'auto-bash-cron-schedule':
+        return Boolean(
+          commandEngine &&
+          commandEngine.userCrontab.includes('organizar_downloads.sh') &&
+          /30\s+2\s+\*\s+\*\s+\*/.test(commandEngine.userCrontab)
+        );
+
+      case 'auto-bash-boss-pipeline': {
+        const scr = fs.getNode('/home/user/rotina_noturna.sh');
+        const logNode = fs.getNode('/home/user/rotina.log');
+        return !!scr && scr.permissions.includes('x') &&
+               fs.getNode('/home/user/downloads/documentos/nota.pdf') !== null &&
+               fs.getNode('/home/user/downloads/rascunho.tmp') === null &&
+               fs.getNode('/home/user/backups/documents/readme.txt') !== null &&
+               !!logNode && (logNode.content || '').includes('Rotina OK') &&
+               Boolean(commandEngine && commandEngine.userCrontab.includes('rotina_noturna.sh'));
+      }
+
+      // ==========================================
+      // 12. ANSIBLE (14 lições)
+      // ==========================================
+      case 'ansible-ssh-prep':
+        return effCmd === 'ssh-keygen' &&
+               (fs.getNode('/home/user/.ssh/id_ed25519.pub') !== null || fs.getNode('/home/user/.ssh/id_rsa.pub') !== null);
+
+      case 'ansible-inventory-ini': {
+        const inv = fs.getNode('/home/user/inventory.ini') || fs.getNode(fs.resolvePath('inventory.ini'));
+        const content = (inv && inv.content) || '';
+        return !!inv &&
+               content.includes('[webservers]') &&
+               content.includes('[databases]') &&
+               content.includes('web1') &&
+               content.includes('web2') &&
+               content.includes('db1');
+      }
+
+      case 'ansible-adhoc-ping':
+        return effCmd === 'ansible' &&
+               output.includes('web1 | SUCCESS') &&
+               output.includes('web2 | SUCCESS') &&
+               output.includes('db1 | SUCCESS') &&
+               output.includes('"ping": "pong"');
+
+      case 'ansible-adhoc-shell':
+        return effCmd === 'ansible' &&
+               (effArgs.includes('shell') || effArgs.includes('command')) &&
+               output.includes('web1 |') &&
+               output.includes('web2 |') &&
+               !output.includes('db1 |') &&
+               output.includes('load average') &&
+               output.includes('/dev/sda1');
+
+      case 'ansible-facts-setup':
+        return effCmd === 'ansible' &&
+               effArgs.includes('setup') &&
+               output.includes('db1 | SUCCESS') &&
+               output.includes('ansible_facts') &&
+               output.includes('Debian');
+
+      case 'ansible-adhoc-copy':
+        return effCmd === 'ansible' &&
+               !!ansible &&
+               ansible.nodes.web1.files['/var/www/html/index.html']?.content.includes('Penguin Gym') &&
+               ansible.nodes.web2.files['/var/www/html/index.html']?.content.includes('Penguin Gym');
+
+      case 'ansible-adhoc-apt-service':
+        return effCmd === 'ansible' &&
+               !!ansible &&
+               ansible.nodes.web1.packages.has('nginx') &&
+               ansible.nodes.web2.packages.has('nginx') &&
+               ansible.nodes.web1.services.nginx?.active === true &&
+               ansible.nodes.web1.services.nginx?.enabled === true &&
+               ansible.nodes.web2.services.nginx?.active === true &&
+               ansible.nodes.web2.services.nginx?.enabled === true;
+
+      case 'ansible-first-playbook': {
+        const pb = fs.getNode('/home/user/webserver.yml') || fs.getNode(fs.resolvePath('webserver.yml'));
+        return !!pb &&
+               effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               !!ansible.lastRecap &&
+               ansible.lastRecap.totalFailed === 0 &&
+               ansible.nodes.web1.packages.has('nginx') &&
+               ansible.nodes.web1.services.nginx?.active === true &&
+               ansible.nodes.web2.services.nginx?.active === true;
+      }
+
+      case 'ansible-idempotency-check':
+        return effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               !ansible.lastCheckMode &&
+               !!ansible.lastRecap &&
+               ansible.lastRecap.totalFailed === 0 &&
+               ansible.lastRecap.totalChanged === 0 &&
+               ansible.lastRecap.totalOk >= 4;
+
+      case 'ansible-check-diff':
+        return effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               ansible.lastCheckMode === true &&
+               output.includes('--- before:') &&
+               !ansible.nodes.web1.files['/var/www/html/index.html'] &&
+               !ansible.nodes.web2.files['/var/www/html/index.html'];
+
+      case 'ansible-vars-lineinfile':
+        return effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               ansible.nodes.web1.files['/etc/app.conf']?.content.includes('ENV=production') &&
+               ansible.nodes.web2.files['/etc/app.conf']?.content.includes('ENV=production') &&
+               ansible.nodes.db1.files['/etc/app.conf']?.content.includes('ENV=production');
+
+      case 'ansible-handlers-notify':
+        return effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               !!ansible.lastRecap &&
+               ansible.lastRecap.handlersTriggered.includes('Restart nginx') &&
+               ansible.nodes.web1.files['/etc/nginx/nginx.conf']?.content.includes('worker_processes 4') &&
+               ansible.nodes.web1.services.nginx?.active === true;
+
+      case 'ansible-loop-when':
+        return effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               !!ansible.lastRecap &&
+               ansible.nodes.web1.packages.has('jq') &&
+               ansible.nodes.db1.packages.has('jq') &&
+               ansible.nodes.web1.ufwRules.has('allow:80') &&
+               ansible.nodes.web2.ufwRules.has('allow:80') &&
+               !ansible.nodes.db1.ufwRules.has('allow:80') &&
+               ansible.lastRecap.totalSkipped >= 1;
+
+      case 'ansible-boss-deploy':
+        return effCmd === 'ansible-playbook' &&
+               !!ansible &&
+               ansible.playbookRuns.length >= 2 &&
+               !!ansible.lastRecap &&
+               ansible.lastRecap.totalChanged === 0 &&
+               ansible.lastRecap.totalFailed === 0 &&
+               ansible.nodes.web1.services.nginx?.active === true &&
+               ansible.nodes.web2.files['/var/www/html/index.html']?.content.includes('Penguin Gym') &&
+               ansible.nodes.db1.users.has('deploy');
+
+      // ==========================================
+      // 13. INCIDENTES / BOSS CROSS-DOMAIN (6 lições)
       // ==========================================
       case 'inc-nginx-404':
         return allSessionText.includes('/var/log/nginx') &&

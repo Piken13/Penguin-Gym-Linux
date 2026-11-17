@@ -1062,7 +1062,8 @@ class TerminalUI {
         'id', 'groups', 'who', 'w', 'last', 'hostname', 'hostnamectl', 'useradd', 'usermod',
         'userdel', 'groupadd', 'passwd', 'systemctl', 'service', 'journalctl', 'crontab', 'apt',
         'apt-get', 'dpkg', 'ip', 'ifconfig', 'ping', 'traceroute', 'curl', 'wget', 'ss',
-        'netstat', 'dig', 'nslookup', 'host', 'nc', 'netcat', 'ufw', 'ssh', 'scp', 'rsync',
+        'netstat', 'dig', 'nslookup', 'host', 'nc', 'netcat', 'ufw', 'ssh', 'ssh-keygen', 'scp', 'rsync',
+        'ansible', 'ansible-playbook', 'logger', 'sleep',
         'nano', 'vi', 'vim', 'neofetch', 'cowsay', 'jq', 'nmap', 'source', 'bash', 'sh', 'test',
         'expr', 'seq', 'true', 'false', 'nohup', 'command', 'builtin', 'reset-fs', 'clean-env',
         'exit', 'logout'
@@ -1091,12 +1092,23 @@ class TerminalUI {
         contextPool = ['update', 'upgrade', 'install', 'remove', 'purge', 'search', 'show', 'list', 'autoremove'];
       } else if (firstCmd === 'kill' || firstCmd === 'pkill') {
         contextPool = ['nginx', 'sshd', 'cron', 'dockerd', 'bash', 'systemd', '1', '42', '74', '88', '123', '210'];
+      } else if (firstCmd === 'ansible') {
+        contextPool = ['all', 'webservers', 'databases', 'web1', 'web2', 'db1'];
+      } else if (firstCmd === 'ansible-playbook') {
+        contextPool = ['-i', '--check', '--diff', '--syntax-check'];
       } else if (firstCmd === 'man' || firstCmd === 'whatis' || firstCmd === 'help') {
         contextPool = Object.keys((this.commandEngine && this.commandEngine.getManPagesRegistry()) || {});
       }
     } else if (effTokens.length >= 3) {
       const sub = effTokens[1];
-      if (firstCmd === 'git' && (sub === 'checkout' || sub === 'switch' || sub === 'branch' || sub === 'merge')) {
+      const prevTok = effTokens[effTokens.length - 2];
+      if (firstCmd === 'ansible' && prevTok === '-m') {
+        contextPool = ['ping', 'shell', 'command', 'setup', 'copy', 'file', 'lineinfile', 'apt', 'service', 'user', 'ufw'];
+      } else if (firstCmd === 'ansible' && lastToken.startsWith('-')) {
+        contextPool = ['-i', '-m', '-a', '-b', '--become', '--check'];
+      } else if (firstCmd === 'ansible-playbook' && lastToken.startsWith('-')) {
+        contextPool = ['-i', '--check', '--diff', '--syntax-check', '-e'];
+      } else if (firstCmd === 'git' && (sub === 'checkout' || sub === 'switch' || sub === 'branch' || sub === 'merge')) {
         contextPool = (this.commandEngine && this.commandEngine.git && this.commandEngine.git.branches) || ['main'];
       } else if (firstCmd === 'systemctl') {
         const sKeys = Object.keys((this.commandEngine && this.commandEngine.services) || {});

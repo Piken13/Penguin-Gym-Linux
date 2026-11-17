@@ -2226,6 +2226,54 @@ const MAN_PAGES = {
     "description": "Encerra serviços e desliga/reinicia o sistema operacional.",
     "options": ["-r  Reinicia após desligar", "-h  Desliga o sistema"],
     "examples": ["sudo shutdown -r now"]
+  },
+  "ssh-keygen": {
+    "section": "1",
+    "short": "gera e gerencia pares de chaves criptográficas SSH",
+    "synopsis": "ssh-keygen [-t tipo] [-f caminho]",
+    "description": "Cria chaves pública e privada em ~/.ssh/ para autenticação segura e automatizada sem digitar senha (base do Ansible).",
+    "options": ["-t ed25519|rsa  Define o algoritmo da chave", "-f ARQUIVO      Define caminho de saída da chave"],
+    "examples": ["ssh-keygen -t ed25519"]
+  },
+  "logger": {
+    "section": "1",
+    "short": "envia mensagens de scripts para o log do sistema",
+    "synopsis": "logger MENSAGEM",
+    "description": "Registra mensagens em /var/log/syslog, útil para auditar execuções de scripts Bash e cron jobs.",
+    "options": [],
+    "examples": ["logger \"Backup concluído com sucesso\""]
+  },
+  "ansible": {
+    "section": "1",
+    "short": "executa módulos ad-hoc em múltiplos servidores via SSH",
+    "synopsis": "ansible ALVO [-i INVENTARIO] [-m MODULO] [-a ARGS] [-b]",
+    "description": "Ferramenta agentless de automação que envia tarefas pontuais a grupos do inventário sem precisar abrir SSH manualmente.",
+    "options": [
+      "-i ARQUIVO   Caminho do inventário (ex: inventory.ini)",
+      "-m MODULO    Módulo (ping, shell, setup, copy, file, lineinfile, apt, service)",
+      "-a ARGS      Argumentos do módulo entre aspas",
+      "-b, --become Executa a tarefa com privilégio elevado (sudo)"
+    ],
+    "examples": [
+      "ansible all -i inventory.ini -m ping",
+      "ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\""
+    ]
+  },
+  "ansible-playbook": {
+    "section": "1",
+    "short": "aplica Playbooks YAML declarativos e idempotentes nos servidores",
+    "synopsis": "ansible-playbook [-i INVENTARIO] [--check] [--diff] PLAYBOOK.yml",
+    "description": "Lê arquivos YAML com tasks, variáveis (vars), loops, condicionais (when) e handlers, aplicando mudanças somente quando o estado real difere do desejado.",
+    "options": [
+      "-i ARQUIVO      Inventário de hosts",
+      "--check, -C     Modo simulado (dry-run): não altera o sistema remoto",
+      "--diff, -D      Exibe diferenças antes/depois em arquivos modificados",
+      "--syntax-check  Valida a sintaxe YAML do playbook sem executar"
+    ],
+    "examples": [
+      "ansible-playbook -i inventory.ini webserver.yml",
+      "ansible-playbook -i inventory.ini deploy.yml --check --diff"
+    ]
   }
 };
 

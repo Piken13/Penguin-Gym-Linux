@@ -407,7 +407,7 @@ SwapFree:        2097152 kB`,
    * Configura o ambiente e arquivos iniciais específicos para a lição selecionada
    * preservando arquivos extras criados pelo aluno quando não conflitam com a missão.
    */
-  setupForLesson(lessonId, git, docker, sql, forceReset = false) {
+  setupForLesson(lessonId, git, docker, sql, forceReset = false, ansible = null) {
     if (forceReset || !this.root) {
       this.reset();
     } else {
@@ -419,6 +419,7 @@ SwapFree:        2097152 kB`,
     if (git) git.reset();
     if (docker) docker.reset();
     if (sql) sql.reset();
+    if (ansible) ansible.reset();
 
     if (!lessonId) return;
 
@@ -785,10 +786,161 @@ SwapFree:        2097152 kB`,
           }
         }
       }
+
+      // Lições de Automação Bash
+      if (lessonId.startsWith('auto-bash-')) {
+        if (lessonId === 'auto-bash-hello') {
+          try { this.removeFile('/home/user/organiza.sh', true); } catch {}
+        }
+        if (lessonId === 'auto-bash-vars-date') {
+          try { this.removeRecursive('/home/user/logs', true); } catch {}
+        }
+        if (lessonId === 'auto-bash-logging') {
+          try { this.removeFile('/home/user/automacao.log', true); } catch {}
+          this.writeFile('/home/user/rotina.sh', '#!/bin/bash\necho "Executando tarefa automatica"\nls /root\n');
+          const rNode = this.getNode('/home/user/rotina.sh');
+          if (rNode) { rNode.permissions = 'rwxr-xr-x'; rNode.owner = 'user'; }
+        }
+        if (lessonId === 'auto-bash-prep-dirs') {
+          try { this.removeRecursive('/home/user/downloads/imagens', true); } catch {}
+          try { this.removeRecursive('/home/user/downloads/documentos', true); } catch {}
+          try { this.removeRecursive('/home/user/downloads/arquivos', true); } catch {}
+          this.createDirectory('/home/user/downloads', true, 'rwxr-xr-x', 'user');
+        }
+        if (lessonId === 'auto-bash-glob-move') {
+          this.createDirectory('/home/user/downloads/imagens', true, 'rwxr-xr-x', 'user');
+          this.createDirectory('/home/user/downloads/documentos', true, 'rwxr-xr-x', 'user');
+          this.createDirectory('/home/user/downloads/arquivos', true, 'rwxr-xr-x', 'user');
+          this.writeFile('/home/user/downloads/fatura.pdf', 'PDF fatura');
+          this.writeFile('/home/user/downloads/contrato.pdf', 'PDF contrato');
+          this.writeFile('/home/user/downloads/foto1.jpg', 'JPG foto');
+          this.writeFile('/home/user/downloads/logo.png', 'PNG logo');
+          this.writeFile('/home/user/downloads/backup.zip', 'ZIP arquivo');
+        }
+        if (lessonId === 'auto-bash-organizer-script') {
+          try { this.removeFile('/home/user/organizar_downloads.sh', true); } catch {}
+          try { this.removeRecursive('/home/user/downloads', true); } catch {}
+          this.createDirectory('/home/user/downloads/imagens', true, 'rwxr-xr-x', 'user');
+          this.createDirectory('/home/user/downloads/documentos', true, 'rwxr-xr-x', 'user');
+          this.createDirectory('/home/user/downloads/arquivos', true, 'rwxr-xr-x', 'user');
+          this.writeFile('/home/user/downloads/manual.pdf', 'PDF manual');
+          this.writeFile('/home/user/downloads/guia.pdf', 'PDF guia');
+          this.writeFile('/home/user/downloads/banner.png', 'PNG banner');
+          this.writeFile('/home/user/downloads/temp.tmp', 'TMP');
+        }
+        if (lessonId === 'auto-bash-cleanup-tmp') {
+          this.createDirectory('/home/user/downloads', true, 'rwxr-xr-x', 'user');
+          this.writeFile('/home/user/downloads/cache1.tmp', 'tmp1');
+          this.writeFile('/home/user/downloads/cache2.tmp', 'tmp2');
+          this.writeFile('/home/user/downloads/importante.txt', 'manter este arquivo\n');
+        }
+        if (lessonId === 'auto-bash-rsync-local') {
+          try { this.removeRecursive('/home/user/backups', true); } catch {}
+        }
+        if (lessonId === 'auto-bash-rsync-dryrun') {
+          try { this.removeRecursive('/home/user/backups', true); } catch {}
+          this.createDirectory('/home/user/backups/documents', true, 'rwxr-xr-x', 'user');
+          this.writeFile('/home/user/backups/documents/readme.txt', this.getBaselineContents().readme);
+          this.writeFile('/home/user/backups/documents/obsoleto.txt', 'arquivo antigo que so existe no backup\n');
+        }
+        if (lessonId === 'auto-bash-backup-tar-verify') {
+          try { this.removeRecursive('/home/user/backups', true); } catch {}
+          this.createDirectory('/home/user/backups', true, 'rwxr-xr-x', 'user');
+          try { this.removeFile('/home/user/backup.sh', true); } catch {}
+        }
+        if (lessonId === 'auto-bash-disk-alert') {
+          try { this.removeFile('/home/user/checa_disco.sh', true); } catch {}
+        }
+        if (lessonId === 'auto-bash-service-watchdog') {
+          try { this.removeFile('/home/user/watchdog.sh', true); } catch {}
+        }
+        if (lessonId === 'auto-bash-cron-schedule') {
+          this.writeFile('/home/user/organizar_downloads.sh', '#!/bin/bash\necho "Organizacao concluida"\n');
+          const oNode = this.getNode('/home/user/organizar_downloads.sh');
+          if (oNode) { oNode.permissions = 'rwxr-xr-x'; oNode.owner = 'user'; }
+        }
+        if (lessonId === 'auto-bash-boss-pipeline') {
+          try { this.removeFile('/home/user/rotina_noturna.sh', true); } catch {}
+          try { this.removeFile('/home/user/rotina.log', true); } catch {}
+          try { this.removeRecursive('/home/user/backups', true); } catch {}
+          try { this.removeRecursive('/home/user/downloads', true); } catch {}
+          this.createDirectory('/home/user/downloads/documentos', true, 'rwxr-xr-x', 'user');
+          this.createDirectory('/home/user/downloads/imagens', true, 'rwxr-xr-x', 'user');
+          this.writeFile('/home/user/downloads/nota.pdf', 'PDF nota');
+          this.writeFile('/home/user/downloads/rascunho.tmp', 'TMP rascunho');
+        }
+      }
+
+      // Lições de Ansible
+      if (lessonId.startsWith('ansible-')) {
+        const defaultInv = '[webservers]\nweb1 ansible_host=10.0.1.11\nweb2 ansible_host=10.0.1.12\n\n[databases]\ndb1 ansible_host=10.0.1.21\n';
+        if (lessonId === 'ansible-ssh-prep') {
+          try { this.removeRecursive('/home/user/.ssh', true); } catch {}
+        } else {
+          this.createDirectory('/home/user/.ssh', true, 'rwx------', 'user');
+          this.writeFile('/home/user/.ssh/id_ed25519', '-----BEGIN OPENSSH PRIVATE KEY-----\nVIRTUAL_KEY\n-----END OPENSSH PRIVATE KEY-----\n');
+          this.writeFile('/home/user/.ssh/id_ed25519.pub', 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPenguinGymVirtualKey123456 user@penguin-gym\n');
+        }
+
+        if (lessonId === 'ansible-inventory-ini') {
+          try { this.removeFile('/home/user/inventory.ini', true); } catch {}
+        } else if (lessonId !== 'ansible-ssh-prep') {
+          this.writeFile('/home/user/inventory.ini', defaultInv);
+        }
+
+        if (lessonId === 'ansible-adhoc-copy' || lessonId === 'ansible-boss-deploy') {
+          this.writeFile('/home/user/index.html', '<h1>Penguin Gym Cloud Ready!</h1>\n');
+        }
+        if (lessonId === 'ansible-first-playbook') {
+          try { this.removeFile('/home/user/webserver.yml', true); } catch {}
+        }
+        if (lessonId === 'ansible-idempotency-check') {
+          this.writeFile('/home/user/webserver.yml',
+            '- name: Configurar Webservers\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Iniciar nginx\n      service: name=nginx state=started enabled=yes\n'
+          );
+          if (ansible) {
+            ['web1', 'web2'].forEach(h => {
+              ansible.nodes[h].packages.add('nginx');
+              ansible.nodes[h].services.nginx = { active: true, enabled: true };
+            });
+          }
+        }
+        if (lessonId === 'ansible-check-diff') {
+          this.writeFile('/home/user/index.html', '<h1>Deploy v2.0 - Penguin Gym</h1>\n');
+          this.writeFile('/home/user/deploy.yml',
+            '- name: Deploy pagina web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Publicar index.html\n      copy: src=index.html dest=/var/www/html/index.html mode=0644\n'
+          );
+        }
+        if (lessonId === 'ansible-vars-lineinfile') {
+          this.writeFile('/home/user/vars_app.yml',
+            '- name: Configurar ambiente da aplicacao\n  hosts: all\n  become: yes\n  vars:\n    app_env: production\n  tasks:\n    - name: Definir ENV no app.conf\n      lineinfile: path=/etc/app.conf line="ENV={{ app_env }}" state=present\n'
+          );
+        }
+        if (lessonId === 'ansible-handlers-notify') {
+          this.writeFile('/home/user/nginx.conf', 'worker_processes 4;\nevents { worker_connections 1024; }\n');
+          this.writeFile('/home/user/nginx_config.yml',
+            '- name: Atualizar config do Nginx com Handler\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Garantir nginx instalado\n      apt: name=nginx state=present\n    - name: Copiar nginx.conf\n      copy: src=nginx.conf dest=/etc/nginx/nginx.conf mode=0644\n      notify: Restart nginx\n  handlers:\n    - name: Restart nginx\n      service: name=nginx state=restarted\n'
+          );
+          if (ansible) {
+            ['web1', 'web2'].forEach(h => ansible.nodes[h].packages.add('nginx'));
+          }
+        }
+        if (lessonId === 'ansible-loop-when') {
+          this.writeFile('/home/user/loop_when.yml',
+            '- name: Pacotes base e firewall condicional\n  hosts: all\n  become: yes\n  tasks:\n    - name: Instalar utilitarios\n      apt: name={{ item }} state=present\n      loop:\n        - curl\n        - htop\n        - jq\n    - name: Liberar HTTP somente nos webservers\n      ufw: rule=allow port=80\n      when: inventory_hostname in groups[\'webservers\']\n'
+          );
+        }
+        if (lessonId === 'ansible-boss-deploy') {
+          this.writeFile('/home/user/nginx.conf', 'worker_processes 4;\nevents { worker_connections 2048; }\n');
+          this.writeFile('/home/user/infra.yml',
+            '- name: Provisionamento completo da frota\n  hosts: all\n  become: yes\n  tasks:\n    - name: Criar usuario deploy\n      user: name=deploy state=present\n    - name: Instalar curl nos servidores\n      apt: name=curl state=present\n\n- name: Configurar camada web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Publicar nginx.conf\n      copy: src=nginx.conf dest=/etc/nginx/nginx.conf mode=0644\n      notify: Restart nginx\n    - name: Publicar index.html\n      copy: src=index.html dest=/var/www/html/index.html mode=0644\n    - name: Liberar porta 80\n      ufw: rule=allow port=80\n  handlers:\n    - name: Restart nginx\n      service: name=nginx state=started enabled=yes\n'
+          );
+        }
+      }
     } finally {
       this.sudoMode = prevSudo;
     }
-    if (['permission-sudo-basic', 'bash-redirect-stderr', 'bash-redirect-all', 'bash-redirect-devnull'].includes(lessonId)) {
+    if (['permission-sudo-basic', 'bash-redirect-stderr', 'bash-redirect-all', 'bash-redirect-devnull', 'auto-bash-logging'].includes(lessonId)) {
       this.sudoMode = false;
     }
   }

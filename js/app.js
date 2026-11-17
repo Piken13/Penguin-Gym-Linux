@@ -22,7 +22,8 @@ class App {
     this.git = new GitEngine(this.fs);
     this.docker = new DockerEngine();
     this.sql = new SQLEngine();
-    this.commandEngine = new CommandEngine(this.fs, this.git, this.docker, this.sql);
+    this.ansible = typeof AnsibleEngine !== 'undefined' ? new AnsibleEngine(this.fs) : null;
+    this.commandEngine = new CommandEngine(this.fs, this.git, this.docker, this.sql, null, this.ansible);
 
     this.loadProgress();
 
@@ -288,13 +289,13 @@ class App {
     if (forceReset && this.commandEngine) {
       this.commandEngine.resetEnvironment(false);
     }
-    this.fs.setupForLesson(lesson.id, this.git, this.docker, this.sql, forceReset);
+    this.fs.setupForLesson(lesson.id, this.git, this.docker, this.sql, forceReset, this.ansible);
     this.prepareCommandEngineForLesson(lesson.id);
 
     this.terminal.updatePrompt();
 
     // Auto-select appropriate GUI Inspector tab
-    if (lesson.category === 'git' || lesson.category === 'docker' || lesson.id === 'inc-git-secret-leak' || lesson.id === 'inc-docker-conflict') {
+    if (lesson.category === 'git' || lesson.category === 'docker' || lesson.category === 'ansible' || lesson.id === 'inc-git-secret-leak' || lesson.id === 'inc-docker-conflict') {
       this.switchGuiTab('tools');
     } else if (lesson.category === 'database' || lesson.id === 'inc-backup-pipeline') {
       this.switchGuiTab('sql');
@@ -389,7 +390,7 @@ class App {
     }
 
     if (this.currentLesson) {
-      this.fs.setupForLesson(this.currentLesson.id, this.git, this.docker, this.sql, true);
+      this.fs.setupForLesson(this.currentLesson.id, this.git, this.docker, this.sql, true, this.ansible);
       this.lessonSessionHistory = [];
       this.prepareCommandEngineForLesson(this.currentLesson.id);
     } else {
@@ -397,6 +398,7 @@ class App {
       if (this.git) this.git.reset();
       if (this.docker) this.docker.reset();
       if (this.sql) this.sql.reset();
+      if (this.ansible) this.ansible.reset();
     }
 
     this.terminal.updatePrompt();
@@ -474,6 +476,7 @@ class App {
         git: this.git,
         docker: this.docker,
         sql: this.sql,
+        ansible: this.ansible,
         commandEngine: this.commandEngine,
         sessionHistory: this.lessonSessionHistory,
         res: res
@@ -643,6 +646,35 @@ class App {
   }
 
   renderGuiTools() {
+    const ansibleEl = document.getElementById('guiAnsibleState');
+    if (ansibleEl && this.ansible) {
+      const nodes = Object.values(this.ansible.nodes || {});
+      const recap = this.ansible.lastRecap;
+      ansibleEl.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:0.35rem;">
+          ${nodes.map(n => {
+            const nginxState = n.services && n.services.nginx
+              ? (n.services.nginx.active ? '🟢 nginx on' : '⚪ nginx off')
+              : (n.packages.has('postgresql') ? '🗄️ postgres' : '⚪ base');
+            const pkgsCount = n.packages ? n.packages.size : 0;
+            const ufwCount = n.ufwRules ? n.ufwRules.size : 0;
+            return `
+              <div class="gui-badge-row" style="background:var(--bg-elevated);padding:0.35rem 0.5rem;border-radius:4px;">
+                <span>${n.reachable ? '🟢' : '🔴'} <strong>${this.escapeHtml(n.host)}</strong> (${this.escapeHtml(n.ip)})</span>
+                <span class="output-muted" style="font-size:0.68rem;">${this.escapeHtml(nginxState)} • ${pkgsCount} pkgs${ufwCount > 0 ? ` • ufw:${ufwCount}` : ''}</span>
+              </div>
+            `;
+          }).join('')}
+          ${recap ? `
+            <div class="gui-badge-row" style="margin-top:0.2rem;">
+              <span>Último Recap (${this.escapeHtml(recap.playbook || 'run')}):</span>
+              <span class="gui-pill">ok=${recap.totalOk} chg=${recap.totalChanged}${recap.checkMode ? ' (check)' : ''}</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
     const gitEl = document.getElementById('guiGitState');
     if (gitEl) {
       if (!this.git.initialized) {
@@ -1111,6 +1143,7 @@ class App {
         if (this.git) this.git.reset();
         if (this.docker) this.docker.reset();
         if (this.sql) this.sql.reset();
+        if (this.ansible) this.ansible.reset();
         this.setActiveTab('beginner', true);
         this.updateStats();
         this.terminal.writeLine('<span class="ansi-green">✓ Progresso reiniciado com sucesso!</span>');

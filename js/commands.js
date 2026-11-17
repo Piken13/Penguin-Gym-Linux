@@ -5,11 +5,12 @@
  */
 
 class CommandEngine {
-  constructor(fs, git, docker, sql) {
+  constructor(fs, git, docker, sql, manPages, ansible) {
     this.fs = fs;
     this.git = git;
     this.docker = docker;
     this.sql = sql;
+    this.ansible = ansible || (typeof AnsibleEngine !== 'undefined' ? new AnsibleEngine(this.fs) : null);
     this.history = [];
     this.resetEnvironment();
   }
@@ -19,6 +20,7 @@ class CommandEngine {
    */
   resetEnvironment(clearHistory = false) {
     if (clearHistory) this.history = [];
+    if (this.ansible && typeof this.ansible.reset === 'function') this.ansible.reset();
     this.killedProcesses = new Set();
     this.backgroundJobs = [];
     this.nextJobPid = 501;
@@ -105,8 +107,11 @@ class CommandEngine {
       this.services.postgresql.active = false;
       this.services.postgresql.enabled = false;
     }
-    if (lessonId === 'sys-crontab-list' || lessonId === 'sys-crontab-remove' || lessonId === 'sys-crontab-edit') {
+    if (lessonId === 'sys-crontab-list' || lessonId === 'sys-crontab-remove' || lessonId === 'sys-crontab-edit' || lessonId === 'auto-bash-cron-schedule' || lessonId === 'auto-bash-boss-pipeline') {
       this.userCrontab = '# m h  dom mon dow   command\n0 3 * * * /usr/local/bin/backup.sh\n';
+    }
+    if (lessonId === 'auto-bash-service-watchdog') {
+      this.services.nginx.active = false;
     }
     if (lessonId.startsWith('net-curl-') || lessonId === 'net-nc-port' || lessonId === 'net-ss-netstat' || lessonId === 'inc-nginx-404') {
       this.services.nginx.active = true;
@@ -462,14 +467,14 @@ class CommandEngine {
           atCommandPos = true;
           continue;
         }
-        if (ch === ';') {
+        if (ch === ';' || ch === '\n') {
           if (curr.trim()) parts.push({ cmd: curr.trim(), nextOp: ';' });
           curr = '';
           atCommandPos = true;
           continue;
         }
       }
-      if (!inQuote && parenDepth === 0 && blockDepth > 0 && ch === ';') {
+      if (!inQuote && parenDepth === 0 && blockDepth > 0 && (ch === ';' || ch === '\n')) {
         atCommandPos = true;
       } else if (!inQuote && /\s/.test(ch)) {
         // Keep atCommandPos if still before any non-whitespace command word
@@ -534,19 +539,68 @@ class CommandEngine {
       return { output: outputs.join('\n'), code: lastCode };
     }
 
-    // 3. Condicional if: if COND; then CMD1; [else CMD2;] fi
-    const ifMatch = trimmed.match(/^if\s+(.*?)(?:;|\n)\s*then(?:\s+|;|\n)(.*?)(?:(?:;|\n|\s)\s*else(?:\s+|;|\n)(.*?))?(?:;|\n|\s)\s*fi$/s);
-    if (ifMatch) {
-      const condCmd = ifMatch[1].trim();
-      const thenCmd = ifMatch[2].trim();
-      const elseCmd = ifMatch[3] ? ifMatch[3].trim() : null;
-      const condRes = this.executeLine(condCmd, true);
-      if (condRes.code === 0) {
-        return this.executeLine(thenCmd, true);
-      } else if (elseCmd) {
-        return this.executeLine(elseCmd, true);
+    // 3. Condicional if: if COND; then CMD1; [elif COND2; then CMD2;]* [else CMD3;] fi
+    if (/^if(?=\s|;|\n|$)/.test(trimmed)) {
+      const splitIfBranches = (src) => {
+        let inQ = null;
+        let depth = 0;
+        let pDepth = 0;
+        const hits = [];
+        for (let i = 0; i < src.length; i++) {
+          const ch = src[i];
+          if (ch === '\\' && i + 1 < src.length && inQ !== "'") { i++; continue; }
+          if (ch === '"' || ch === "'") { inQ = inQ === ch ? null : (inQ || ch); continue; }
+          if (inQ) continue;
+          if (ch === '(') { pDepth++; continue; }
+          if (ch === ')' && pDepth > 0) { pDepth--; continue; }
+          if (pDepth !== 0) continue;
+          const prev = i === 0 ? ';' : src[i - 1];
+          if (!/[\s;\n]/.test(prev)) continue;
+          const m = src.slice(i).match(/^(if|for|while|until|then|elif|else|fi|done)(?=[\s;\n]|$)/);
+          if (!m) continue;
+          const kw = m[1];
+          if (kw === 'if' || kw === 'for' || kw === 'while' || kw === 'until') {
+            if (kw === 'if' && depth === 0) hits.push({ kw: 'if', start: i, end: i + kw.length });
+            depth++;
+          } else if (kw === 'fi' || kw === 'done') {
+            depth--;
+            if (kw === 'fi' && depth === 0) hits.push({ kw: 'fi', start: i, end: i + kw.length });
+          } else if (depth === 1 && (kw === 'then' || kw === 'elif' || kw === 'else')) {
+            hits.push({ kw, start: i, end: i + kw.length });
+          }
+          i += kw.length - 1;
+        }
+        return hits;
+      };
+
+      const hits = splitIfBranches(trimmed);
+      const fiHit = hits[hits.length - 1];
+      if (hits.length >= 3 && hits[0].kw === 'if' && fiHit && fiHit.kw === 'fi') {
+        const branches = [];
+        let curCond = null;
+        let curThenIdx = null;
+        for (let idx = 0; idx < hits.length; idx++) {
+          const h = hits[idx];
+          if (h.kw === 'if' || h.kw === 'elif') {
+            const nextThen = hits[idx + 1];
+            if (!nextThen || nextThen.kw !== 'then') break;
+            curCond = trimmed.slice(h.end, nextThen.start).replace(/^[;\s]+|[;\s]+$/g, '');
+            curThenIdx = nextThen.end;
+          } else if (h.kw === 'then') {
+            const nextSep = hits[idx + 1];
+            const bodyEnd = nextSep ? nextSep.start : fiHit.start;
+            branches.push({ cond: curCond, body: trimmed.slice(curThenIdx, bodyEnd).replace(/^[;\s]+|[;\s]+$/g, '') });
+          } else if (h.kw === 'else') {
+            branches.push({ cond: null, body: trimmed.slice(h.end, fiHit.start).replace(/^[;\s]+|[;\s]+$/g, '') });
+          }
+        }
+        for (const br of branches) {
+          if (br.cond === null || this.executeLine(br.cond, true).code === 0) {
+            return br.body ? this.executeLine(br.body, true) : { output: '', code: 0 };
+          }
+        }
+        return { output: '', code: 0 };
       }
-      return { output: '', code: 0 };
     }
 
     return null;
@@ -660,6 +714,7 @@ class CommandEngine {
       while (j < cmdStr.length && /\s/.test(cmdStr[j])) j++;
       let tokRaw = '';
       let q = null;
+      let pDepth = 0;
       while (j < cmdStr.length) {
         const c = cmdStr[j];
         if (c === '\\' && j + 1 < cmdStr.length && q !== "'") {
@@ -673,7 +728,27 @@ class CommandEngine {
           j++;
           continue;
         }
-        if (!q && (/\s/.test(c) || c === '>' || c === '<' || c === ';' || c === '|')) {
+        if (q !== "'") {
+          if (c === '$' && cmdStr[j + 1] === '(') {
+            pDepth++;
+            tokRaw += '$(';
+            j += 2;
+            continue;
+          }
+          if (pDepth > 0 && c === '(') {
+            pDepth++;
+            tokRaw += c;
+            j++;
+            continue;
+          }
+          if (pDepth > 0 && c === ')') {
+            pDepth--;
+            tokRaw += c;
+            j++;
+            continue;
+          }
+        }
+        if (!q && pDepth === 0 && (/\s/.test(c) || c === '>' || c === '<' || c === ';' || c === '|')) {
           break;
         }
         tokRaw += c;
@@ -1751,8 +1826,25 @@ Operating System: Debian GNU/Linux 12 (bookworm)
         case 'groupadd':
           return this.cmdGroupadd(args);
 
-        case 'date':
-          return { output: new Date().toString(), code: 0 };
+        case 'date': {
+          const fmtArg = args.find(a => a.startsWith('+'));
+          const now = new Date();
+          if (fmtArg) {
+            const pad = (n) => String(n).padStart(2, '0');
+            const out = fmtArg.slice(1)
+              .replace(/%F/g, `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`)
+              .replace(/%T/g, `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`)
+              .replace(/%Y/g, String(now.getFullYear()))
+              .replace(/%m/g, pad(now.getMonth() + 1))
+              .replace(/%d/g, pad(now.getDate()))
+              .replace(/%H/g, pad(now.getHours()))
+              .replace(/%M/g, pad(now.getMinutes()))
+              .replace(/%S/g, pad(now.getSeconds()))
+              .replace(/%s/g, String(Math.floor(now.getTime() / 1000)));
+            return { output: out, code: 0 };
+          }
+          return { output: now.toString(), code: 0 };
+        }
 
         case 'which': {
           const target = args[0];
@@ -1771,7 +1863,7 @@ Operating System: Debian GNU/Linux 12 (bookworm)
             'lscpu', 'lsblk', 'free', 'df', 'fdisk', 'blkid', 'systemctl', 'service', 'journalctl', 'apt', 'apt-get', 'dpkg', 'useradd', 'usermod', 'userdel', 'groupadd', 'passwd', 'groups', 'id', 'crontab', 'dmesg', 'vmstat', 'last', 'w', 'who', 'exit',
             'tee', 'cut', 'tr', 'sed', 'awk', 'xargs', 'column', 'paste', 'tree', 'ps', 'top', 'htop', 'kill', 'pkill', 'killall', 'pgrep', 'du', 'jq',
             'tar', 'gzip', 'gunzip', 'zcat', 'zip', 'unzip', 'ln', 'stat', 'file', 'nl', 'tac', 'rev', 'md5sum', 'sha256sum', 'cksum', 'base64',
-            'git', 'docker', 'sqlite3',
+            'git', 'docker', 'sqlite3', 'ansible', 'ansible-playbook', 'ssh-keygen', 'logger',
             'bash', 'sh', 'source', 'alias', 'unalias', 'history', 'pushd', 'popd', 'dirs', 'seq', 'bc', 'expr', 'test', 'type', 'sleep', 'cowsay',
             'ip', 'ifconfig', 'route', 'ping', 'curl', 'wget', 'dig', 'nslookup', 'host', 'traceroute', 'tracepath', 'ss', 'netstat', 'nc', 'netcat', 'nmap', 'telnet', 'ufw', 'iptables', 'nftables',
             'realpath', 'readlink', 'basename', 'dirname', 'reset-fs', 'clean-env'
@@ -1899,7 +1991,7 @@ Operating System: Debian GNU/Linux 12 (bookworm)
           return this.cmdJournalctl(args);
 
         case 'crontab':
-          return this.cmdCrontab(args);
+          return this.cmdCrontab(args, stdin);
 
         case 'apt':
         case 'apt-get':
@@ -1952,12 +2044,42 @@ Operating System: Debian GNU/Linux 12 (bookworm)
           if (args.length === 0) return { output: 'usage: ssh [-46AaCfGgKkMNnqsTtVvXxYy] destination [command]', code: 1, type: 'error' };
           return { output: `ssh: conectado a ${args[args.length - 1]} (Fingerprint SHA256:4b8c... OK)`, code: 0 };
 
-        case 'scp':
-        case 'rsync': {
+        case 'ssh-keygen':
+          return this.cmdSshKeygen(args);
+
+        case 'scp': {
           const clean = args.filter(a => !a.startsWith('-'));
           if (clean.length < 2) return { output: `${cmd}: argumentos de origem e destino necessários`, code: 1, type: 'error' };
           return { output: `${clean[0]}                                  100% 1024     1.2MB/s   00:00`, code: 0 };
         }
+
+        case 'rsync':
+          return this.cmdRsync(args);
+
+        case 'ansible':
+          if (!this.ansible) return { output: 'ansible: motor Ansible não carregado', code: 1, type: 'error' };
+          return this.ansible.executeAdHoc(args);
+
+        case 'ansible-playbook':
+          if (!this.ansible) return { output: 'ansible-playbook: motor Ansible não carregado', code: 1, type: 'error' };
+          return this.ansible.executePlaybook(args);
+
+        case 'logger': {
+          const msg = args.filter(a => !a.startsWith('-')).join(' ').trim() || 'automacao';
+          const logLine = `Jan 15 10:45:00 ${this.envVars.HOSTNAME || 'penguin-gym'} ${this.envVars.USER || 'user'}: ${msg}\n`;
+          const prevSudo = this.fs.sudoMode;
+          this.fs.sudoMode = true;
+          try {
+            const cur = this.fs.getNode('/var/log/syslog') ? this.fs.readFile('/var/log/syslog') : '';
+            this.fs.writeFile('/var/log/syslog', cur + logLine);
+          } finally {
+            this.fs.sudoMode = prevSudo;
+          }
+          return { output: '', code: 0 };
+        }
+
+        case 'sleep':
+          return { output: '', code: 0 };
 
         case 'df':
           return this.cmdDf(args);
@@ -2182,18 +2304,29 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     this.shellVars['#'] = String(scriptArgs.length);
     this.shellVars['@'] = scriptArgs.join(' ');
 
-    const lines = (content || '').split('\n');
-    const outputs = [];
-    let lastCode = 0;
+    const stripInlineComment = (line) => {
+      let inQ = null;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '\\' && i + 1 < line.length && inQ !== "'") { i++; continue; }
+        if (ch === '"' || ch === "'") { inQ = inQ === ch ? null : (inQ || ch); continue; }
+        if (!inQ && ch === '#' && (i === 0 || /\s/.test(line[i - 1]))) {
+          return line.slice(0, i).trimEnd();
+        }
+      }
+      return line;
+    };
+
+    const cleanedScript = (content || '')
+      .split('\n')
+      .map(l => stripInlineComment(l))
+      .filter(l => l.trim().length > 0)
+      .join('\n');
 
     try {
-      for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line || line.startsWith('#')) continue;
-        const res = this.executeLine(line, true);
-        if (res.output) outputs.push(res.output);
-        lastCode = res.code || 0;
-      }
+      if (!cleanedScript.trim()) return { output: '', code: 0 };
+      const res = this.executeLine(cleanedScript, true);
+      return { output: res.output || '', code: res.code || 0 };
     } finally {
       if (isolated) {
         this.shellVars = savedVars;
@@ -2201,8 +2334,6 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         this.fs.currentPath = savedPath;
       }
     }
-
-    return { output: outputs.join('\n'), code: lastCode };
   }
 
   cmdBash(args) {
@@ -2605,19 +2736,53 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       },
       {
         num: 11,
+        id: 'automation-bash',
+        alias: ['autobash', 'automation', 'automacao', 'automation-bash', '11'],
+        icon: '🤖',
+        name: 'Auto Bash',
+        lessons: getCatRangeLabel('automation-bash', 'Lições #257 - #270'),
+        desc: 'Automação prática local: robôs Bash, triagem de Downloads, rsync incremental, watchdogs e cron',
+        commandsSummary: 'chmod +x, for/if, mv, find -delete, rsync -av/-n, df, systemctl, crontab -e, logger',
+        commands: [
+          { cmd: '#!/bin/bash', desc: 'Criar scripts executáveis autônomos e com log (>> ... 2>&1)' },
+          { cmd: 'for + [ -f ]', desc: 'Organizar diretórios como downloads/ automaticamente por extensão' },
+          { cmd: 'rsync -av / -n', desc: 'Sincronização incremental local e simulação segura (--dry-run)' },
+          { cmd: 'df + if -gt', desc: 'Monitorar uso de disco e acionar alertas/autocorreção' },
+          { cmd: 'crontab -e', desc: 'Agendar scripts de automação em horários recorrentes' }
+        ]
+      },
+      {
+        num: 12,
+        id: 'ansible',
+        alias: ['ansible', 'iac', 'playbook', '12'],
+        icon: '⚙️',
+        name: 'Ansible',
+        lessons: getCatRangeLabel('ansible', 'Lições #271 - #284'),
+        desc: 'Automação declarativa multi-servidor via SSH: inventários, módulos ad-hoc e Playbooks YAML idempotentes',
+        commandsSummary: 'ssh-keygen, inventory.ini, ansible -m ping/shell/setup/copy/apt/service -b, ansible-playbook --check --diff',
+        commands: [
+          { cmd: 'ssh-keygen', desc: 'Gerar chave SSH para comunicação sem senha com a frota' },
+          { cmd: 'inventory.ini', desc: 'Agrupar servidores gerenciados ([webservers], [databases])' },
+          { cmd: 'ansible -m ...', desc: 'Executar módulos ad-hoc (ping, shell, setup, copy, apt, service)' },
+          { cmd: 'ansible-playbook', desc: 'Aplicar Playbooks YAML com idempotência, vars, loop, when e handlers' }
+        ]
+      },
+      {
+        num: 13,
         id: 'incidents',
-        alias: ['incidentes', 'incidents', 'boss', 'troubleshooting', '11'],
+        alias: ['incidentes', 'incidents', 'boss', 'troubleshooting', '13'],
         icon: '🚨',
         name: 'Incidentes',
-        lessons: getCatRangeLabel('incidents', 'Lições #247 - #251'),
+        lessons: getCatRangeLabel('incidents', 'Lições #285 - #290'),
         desc: 'Missões práticas de investigação e resolução de incidentes combinando múltiplos comandos',
-        commandsSummary: 'grep, awk, systemctl, ss, git restore, docker stop/rm/rmi, sqlite3, gzip, sha256sum',
+        commandsSummary: 'grep, awk, systemctl, ss, git restore, docker stop/rm/rmi, sqlite3, gzip, sha256sum, chmod',
         commands: [
           { cmd: 'logs + ss', desc: 'Investigar falhas em /var/log/nginx/* e portas ativas' },
           { cmd: 'systemctl', desc: 'Diagnosticar e recuperar serviços fora do ar' },
           { cmd: 'git restore', desc: 'Prevenir vazamento de segredos antes do commit' },
           { cmd: 'docker rm/rmi', desc: 'Resolver conflitos entre contêineres e imagens' },
-          { cmd: 'sqlite3 + gzip', desc: 'Pipeline completo de extração, compactação e hash' }
+          { cmd: 'sqlite3 + gzip', desc: 'Pipeline completo de extração, compactação e hash' },
+          { cmd: 'chmod + ./', desc: 'Corrigir permissão de execução de scripts em produção' }
         ]
       }
     ];
@@ -3155,14 +3320,26 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     const fmt = args[0];
     const vals = args.slice(1);
     let valIdx = 0;
-    let formatted = fmt.replace(/%([sSdDf%])/g, (m, spec) => {
-      if (spec === '%') return '%';
-      const v = valIdx < vals.length ? vals[valIdx++] : '';
-      if (spec === 'd' || spec === 'D') return String(parseInt(v, 10) || 0);
-      if (spec === 'f' || spec === 'F') return String(parseFloat(v) || 0);
-      return String(v);
-    });
-    formatted = formatted.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+    let formatted = '';
+    let consumed = false;
+    do {
+      consumed = false;
+      formatted += fmt.replace(/\\([ntr\\])|%([sSdDf%])/g, (m, esc, spec) => {
+        if (esc) {
+          if (esc === 'n') return '\n';
+          if (esc === 't') return '\t';
+          if (esc === 'r') return '\r';
+          if (esc === '\\') return '\\';
+          return m;
+        }
+        if (spec === '%') return '%';
+        consumed = true;
+        const v = valIdx < vals.length ? vals[valIdx++] : '';
+        if (spec === 'd' || spec === 'D') return String(parseInt(v, 10) || 0);
+        if (spec === 'f' || spec === 'F') return String(parseFloat(v) || 0);
+        return String(v);
+      });
+    } while (consumed && valIdx < vals.length);
     const endsWithNl = formatted.endsWith('\n');
     if (endsWithNl) formatted = formatted.slice(0, -1);
     return { output: formatted, code: 0, trailingNewline: endsWithNl };
@@ -3562,32 +3739,116 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
   }
 
   cmdTr(args, stdin) {
-    const nonOpts = args.filter(a => !a.startsWith('-'));
-    const from = nonOpts[0] || '';
-    const to = nonOpts[1] || '';
-    if (nonOpts.length > 2) {
+    let deleteMode = false;
+    let squeezeMode = false;
+    let complement = false;
+    const nonOpts = [];
+    for (const a of args) {
+      if (a === '--delete') deleteMode = true;
+      else if (a === '--squeeze-repeats') squeezeMode = true;
+      else if (a === '--complement') complement = true;
+      else if (a.startsWith('-') && a.length > 1) {
+        for (const fl of a.slice(1)) {
+          if (fl === 'd') deleteMode = true;
+          else if (fl === 's') squeezeMode = true;
+          else if (fl === 'c' || fl === 'C') complement = true;
+        }
+      } else {
+        nonOpts.push(a);
+      }
+    }
+
+    if ((!deleteMode && nonOpts.length > 2) || (deleteMode && !squeezeMode && nonOpts.length > 1) || nonOpts.length > 2) {
+      const extra = nonOpts[deleteMode && !squeezeMode ? 1 : 2];
       return {
-        output: `tr: operando extra '${nonOpts[2]}'\nNo Linux real, o tr lê apenas da entrada padrão (use '< ${nonOpts[2]}' ou 'cat ${nonOpts[2]} | tr ...').`,
+        output: `tr: operando extra '${extra}'\nNo Linux real, o tr lê apenas da entrada padrão (use '< ${extra}' ou 'cat ${extra} | tr ...').`,
         code: 1,
         type: 'error'
       };
     }
+
+    const expandTrSet = (spec) => {
+      if (!spec) return '';
+      const classes = {
+        '[:lower:]': 'abcdefghijklmnopqrstuvwxyz',
+        '[:upper:]': 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        '[:digit:]': '0123456789',
+        '[:alpha:]': 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        '[:alnum:]': 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+        '[:space:]': ' \t\n\r',
+        '[:blank:]': ' \t'
+      };
+      let s = spec.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\\\/g, '\\');
+      for (const [k, v] of Object.entries(classes)) {
+        if (s.includes(k)) s = s.split(k).join(v);
+      }
+      let expanded = '';
+      for (let i = 0; i < s.length; i++) {
+        if (i + 2 < s.length && s[i + 1] === '-' && s.charCodeAt(i) <= s.charCodeAt(i + 2)) {
+          const start = s.charCodeAt(i);
+          const end = s.charCodeAt(i + 2);
+          for (let code = start; code <= end; code++) expanded += String.fromCharCode(code);
+          i += 2;
+        } else {
+          expanded += s[i];
+        }
+      }
+      return expanded;
+    };
+
+    const from = expandTrSet(nonOpts[0] || '');
+    const to = expandTrSet(nonOpts[1] || '');
+    const fromSet = new Set(from);
+    const inFrom = (ch) => complement ? !fromSet.has(ch) : fromSet.has(ch);
+
     let text = stdin || '';
 
-    if ((from === 'a-z' || from === '[:lower:]') && (to === 'A-Z' || to === '[:upper:]')) {
-      return { output: text.toUpperCase(), code: 0 };
+    if (deleteMode) {
+      let out = '';
+      for (const ch of text) {
+        if (!inFrom(ch)) out += ch;
+      }
+      if (squeezeMode && to) {
+        const sqSet = new Set(to);
+        let sq = '';
+        for (const ch of out) {
+          if (sqSet.has(ch) && sq.endsWith(ch)) continue;
+          sq += ch;
+        }
+        return { output: sq, code: 0 };
+      }
+      return { output: out, code: 0 };
     }
-    if ((from === 'A-Z' || from === '[:upper:]') && (to === 'a-z' || to === '[:lower:]')) {
-      return { output: text.toLowerCase(), code: 0 };
-    }
+
     if (from && to) {
       let out = '';
       for (const ch of text) {
         const idx = from.indexOf(ch);
-        out += idx !== -1 ? (to[Math.min(idx, to.length - 1)] || '') : ch;
+        let mapped = idx !== -1 ? (to[Math.min(idx, to.length - 1)] || '') : ch;
+        if (complement && !fromSet.has(ch)) mapped = to[to.length - 1] || ch;
+        out += mapped;
+      }
+      if (squeezeMode) {
+        const sqSet = new Set(to);
+        let sq = '';
+        for (const ch of out) {
+          if (sqSet.has(ch) && sq.endsWith(ch)) continue;
+          sq += ch;
+        }
+        return { output: sq, code: 0 };
       }
       return { output: out, code: 0 };
     }
+
+    if (squeezeMode && from) {
+      let sq = '';
+      for (const ch of text) {
+        if (inFrom(ch) && sq.endsWith(ch)) continue;
+        sq += ch;
+      }
+      return { output: sq, code: 0 };
+    }
+
     return { output: text, code: 0 };
   }
 
@@ -4431,11 +4692,12 @@ ${h ? '24K' : '24'}\t.`,
     let filterRegex = null;
     let fieldCond = null;
     let body = program.trim();
-    const buildFieldCond = (colStr, op, rawValRaw) => {
-      const colIdx = parseInt(colStr, 10);
+    const buildFieldCond = (colSpec, op, rawValRaw) => {
+      const isNr = colSpec === 'NR';
+      const colIdx = isNr ? 0 : parseInt(colSpec.slice(1), 10);
       const rawVal = rawValRaw.trim().replace(/^['"]|['"]$/g, '');
-      return (fields, line) => {
-        const left = colIdx === 0 ? line : (fields[colIdx - 1] !== undefined ? fields[colIdx - 1] : '');
+      return (fields, line, nr) => {
+        const left = isNr ? String(nr) : (colIdx === 0 ? line : (fields[colIdx - 1] !== undefined ? fields[colIdx - 1] : ''));
         const numL = Number(left);
         const numR = Number(rawVal);
         const bothNum = !Number.isNaN(numL) && !Number.isNaN(numR) && left !== '' && rawVal !== '';
@@ -4450,9 +4712,9 @@ ${h ? '24K' : '24'}\t.`,
     };
 
     const filterMatch = body.match(/^\/(.+?)\/\s*\{(.*)\}$/s);
-    const condMatch = body.match(/^\$(\d+)\s*(==|!=|>=|<=|>|<)\s*([^{}]+?)\s*\{(.*)\}$/s);
+    const condMatch = body.match(/^(\$\d+|NR)\s*(==|!=|>=|<=|>|<)\s*([^{}]+?)\s*\{(.*)\}$/s);
     const filterOnlyMatch = body.match(/^\/(.+?)\/$/s);
-    const condOnlyMatch = body.match(/^\$(\d+)\s*(==|!=|>=|<=|>|<)\s*([^{}]+?)$/s);
+    const condOnlyMatch = body.match(/^(\$\d+|NR)\s*(==|!=|>=|<=|>|<)\s*([^{}]+?)$/s);
 
     if (filterMatch) {
       filterRegex = new RegExp(filterMatch[1]);
@@ -4474,8 +4736,8 @@ ${h ? '24K' : '24'}\t.`,
     lines.forEach((line, idx) => {
       if (filterRegex && !filterRegex.test(line)) return;
       const fields = fieldSep ? line.split(fieldSep) : line.trim().split(/\s+/);
-      if (fieldCond && !fieldCond(fields, line)) return;
       const nr = idx + 1;
+      if (fieldCond && !fieldCond(fields, line, nr)) return;
       const nf = fields.length;
 
       if (!body || body === 'print' || body === 'print $0') {
@@ -5144,7 +5406,7 @@ Jan 15 07:31:02 penguin-gym systemd[1]: Started ${targetName}.service - ${svc.de
     return { output: sliced.join('\n'), code: 0 };
   }
 
-  cmdCrontab(args) {
+  cmdCrontab(args, stdin = '') {
     if (args.includes('-l')) {
       if (!this.userCrontab) return { output: 'no crontab for user', code: 1, type: 'error' };
       return { output: this.userCrontab.trim(), code: 0 };
@@ -5162,6 +5424,15 @@ Jan 15 07:31:02 penguin-gym systemd[1]: Started ${targetName}.service - ${svc.de
         crontabMode: true,
         filePath: '/tmp/.crontab.user'
       };
+    }
+    if (args.includes('-')) {
+      this.userCrontab = stdin || '';
+      return { output: '', code: 0 };
+    }
+    const fileArg = args.find(a => !a.startsWith('-'));
+    if (fileArg) {
+      this.userCrontab = this.fs.readFile(fileArg);
+      return { output: '', code: 0 };
     }
     return { output: 'crontab: uso: crontab [-u user] arquivo | crontab [-u user] [ -e | -l | -r ]', code: 1, type: 'error' };
   }
@@ -5556,6 +5827,185 @@ ${filename}                  100%[=====================================>]      $
 2026-01-15 10:45:00 (12,4 MB/s) - '${filename}' salvo [${content.length}/${content.length}]`,
       code: 0
     };
+  }
+
+  cmdSshKeygen(args) {
+    let keyType = 'ed25519';
+    let outFile = null;
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === '-t' && args[i + 1]) keyType = args[++i].toLowerCase();
+      else if (a === '-f' && args[i + 1]) outFile = args[++i];
+    }
+    const home = this.envVars.HOME || '/home/user';
+    const sshDir = `${home}/.ssh`;
+    try { this.fs.createDirectory(sshDir, true, 'rwx------', this.envVars.USER || 'user'); } catch {}
+    const privPath = outFile || `${sshDir}/id_${keyType}`;
+    const pubPath = `${privPath}.pub`;
+
+    this.fs.writeFile(privPath, `-----BEGIN OPENSSH PRIVATE KEY-----\nPENGUIN_GYM_VIRTUAL_${keyType.toUpperCase()}_PRIVATE_KEY\n-----END OPENSSH PRIVATE KEY-----\n`);
+    const privNode = this.fs.getNode(privPath);
+    if (privNode) privNode.permissions = 'rw-------';
+
+    this.fs.writeFile(pubPath, `ssh-${keyType} AAAAC3NzaC1lZDI1NTE5AAAAIPenguinGymVirtualKey123456 user@penguin-gym\n`);
+    const pubNode = this.fs.getNode(pubPath);
+    if (pubNode) pubNode.permissions = 'rw-r--r--';
+
+    return {
+      output: `Generating public/private ${keyType} key pair.
+Your identification has been saved in ${privPath}
+Your public key has been saved in ${pubPath}
+The key fingerprint is:
+SHA256:pEngu1nGymL1nuxAut0m4t10nVirtu4lK3y user@penguin-gym`,
+      code: 0
+    };
+  }
+
+  cmdRsync(args) {
+    let verbose = false;
+    let dryRun = false;
+    let deleteExtra = false;
+    const excludes = [];
+    const paths = [];
+
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === '--dry-run') dryRun = true;
+      else if (a === '--delete') deleteExtra = true;
+      else if (a === '--verbose') verbose = true;
+      else if (a === '--exclude' && args[i + 1]) excludes.push(args[++i].replace(/^['"]|['"]$/g, ''));
+      else if (a.startsWith('--exclude=')) excludes.push(a.slice(10).replace(/^['"]|['"]$/g, ''));
+      else if (a.startsWith('-') && !a.startsWith('--')) {
+        if (a.includes('v')) verbose = true;
+        if (a.includes('n')) dryRun = true;
+      } else {
+        paths.push(a);
+      }
+    }
+
+    if (paths.length < 2) {
+      return { output: 'rsync: argumentos de origem e destino necessários', code: 1, type: 'error' };
+    }
+
+    const src = paths[0];
+    const dest = paths[paths.length - 1];
+
+    // Remoto simulado via SSH
+    if (src.includes(':') || dest.includes(':')) {
+      return {
+        output: `${dryRun ? '(DRY RUN) ' : ''}${src}                                  100% 1024     1.2MB/s   00:00`,
+        code: 0
+      };
+    }
+
+    const srcNode = this.fs.getNode(src);
+    if (!srcNode) {
+      return {
+        output: `rsync: [sender] link_stat "${this.fs.resolvePath(src)}" failed: No such file or directory (2)`,
+        code: 23,
+        type: 'error'
+      };
+    }
+
+    const matchesExclude = (name) => {
+      return excludes.some(pat => {
+        const reg = new RegExp('^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+        return reg.test(name);
+      });
+    };
+
+    const actions = [];
+    let bytesSent = 0;
+    let totalSize = 0;
+
+    if (srcNode.type === 'file') {
+      const destNode = this.fs.getNode(dest);
+      const targetPath = (destNode && destNode.type === 'directory')
+        ? `${dest.replace(/\/+$/, '')}/${this.fs.getFileName(src)}`
+        : dest;
+      const existing = this.fs.getNode(targetPath);
+      const content = srcNode.content || '';
+      totalSize += content.length;
+      if (!existing || existing.content !== content) {
+        bytesSent += content.length;
+        actions.push(this.fs.getFileName(src));
+        if (!dryRun) {
+          const parent = this.fs.getParentPath(targetPath);
+          try { this.fs.createDirectory(parent, true); } catch {}
+          this.fs.writeFile(targetPath, content);
+        }
+      }
+    } else if (srcNode.type === 'directory') {
+      const destBase = src.endsWith('/')
+        ? dest.replace(/\/+$/, '')
+        : `${dest.replace(/\/+$/, '')}/${this.fs.getFileName(src)}`;
+
+      if (!dryRun) {
+        try { this.fs.createDirectory(destBase, true); } catch {}
+      }
+
+      const expectedRelPaths = new Set();
+
+      const syncDir = (node, targetDir, relPrefix) => {
+        for (const [name, child] of Object.entries(node.children || {})) {
+          if (matchesExclude(name)) continue;
+          const rel = relPrefix ? `${relPrefix}/${name}` : name;
+          const destItem = `${targetDir}/${name}`;
+          if (child.type === 'directory') {
+            expectedRelPaths.add(rel);
+            if (!this.fs.getNode(destItem)) actions.push(`${rel}/`);
+            if (!dryRun) {
+              try { this.fs.createDirectory(destItem, true); } catch {}
+            }
+            syncDir(child, destItem, rel);
+          } else if (child.type === 'file') {
+            expectedRelPaths.add(rel);
+            const content = child.content || '';
+            totalSize += content.length;
+            const curDest = this.fs.getNode(destItem);
+            if (!curDest || curDest.content !== content) {
+              bytesSent += content.length;
+              actions.push(rel);
+              if (!dryRun) {
+                this.fs.writeFile(destItem, content);
+                const created = this.fs.getNode(destItem);
+                if (created && child.permissions) created.permissions = child.permissions;
+              }
+            }
+          }
+        }
+      };
+
+      syncDir(srcNode, destBase, '');
+
+      if (deleteExtra) {
+        const destBaseNode = this.fs.getNode(destBase);
+        const pruneExtra = (node, targetDir, relPrefix) => {
+          if (!node || node.type !== 'directory') return;
+          for (const [name, child] of Object.entries({ ...(node.children || {}) })) {
+            const rel = relPrefix ? `${relPrefix}/${name}` : name;
+            const destItem = `${targetDir}/${name}`;
+            if (!expectedRelPaths.has(rel)) {
+              actions.push(`deleting ${rel}`);
+              if (!dryRun) {
+                try { this.fs.removeRecursive(destItem, true); } catch {}
+              }
+            } else if (child.type === 'directory') {
+              pruneExtra(child, destItem, rel);
+            }
+          }
+        };
+        if (destBaseNode) pruneExtra(destBaseNode, destBase, '');
+      }
+    }
+
+    const lines = [`sending incremental file list${dryRun ? ' (DRY RUN)' : ''}`];
+    if (verbose || dryRun) {
+      for (const act of actions) lines.push(act);
+    }
+    lines.push(`\nsent ${bytesSent + 48} bytes  received 16 bytes  ${bytesSent + 64}.00 bytes/sec`);
+    lines.push(`total size is ${totalSize}  speedup is 1.00${dryRun ? ' (DRY RUN)' : ''}`);
+    return { output: lines.join('\n'), code: 0 };
   }
 
   cmdNetstat(cmd, args) {
