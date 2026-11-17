@@ -1,5 +1,8 @@
 /**
  * Penguin Gym Linux - Virtual SQLite Database Engine
+ * Simulador SQLite fiel com suporte por banco (gym.db e gym_legacy.db),
+ * parser de expressões WHERE (AND, OR, LIKE, BETWEEN, IN, IS NULL, NOT IN subquery),
+ * JOIN / LEFT JOIN, GROUP BY / HAVING, ORDER BY, LIMIT, agregações e erros reais.
  */
 
 class SQLEngine {
@@ -55,363 +58,814 @@ class SQLEngine {
       { id: 10, member_id: 5, plan_id: 1, started_at: '2026-02-01', ended_at: null }
     ];
 
-    this.customTables = {};
+    this.customTablesByDb = { gym: {}, legacy: {} };
+  }
+
+  get customTables() {
+    return { ...this.customTablesByDb.legacy, ...this.customTablesByDb.gym };
+  }
+
+  getDbKey(dbFile) {
+    return dbFile && dbFile.includes('legacy') ? 'legacy' : 'gym';
+  }
+
+  getBuiltinSchema(dbKey) {
+    const membersSchema = `CREATE TABLE members (
+    id    INTEGER PRIMARY KEY,
+    name  TEXT NOT NULL,
+    email TEXT,
+    city  TEXT NOT NULL,
+    age   INTEGER NOT NULL
+);`;
+    if (dbKey === 'legacy') {
+      return {
+        members: {
+          columns: ['id', 'name', 'email', 'city', 'age'],
+          schema: membersSchema
+        },
+        plans: {
+          columns: ['id', 'name', 'monthly_fee'],
+          schema: `CREATE TABLE plans (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    monthly_fee INTEGER NOT NULL
+);`
+        },
+        enrollments: {
+          columns: ['id', 'member_id', 'plan_id', 'started_at', 'ended_at'],
+          schema: `CREATE TABLE enrollments (
+    id         INTEGER PRIMARY KEY,
+    member_id  INTEGER NOT NULL,
+    plan_id    INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at   TEXT
+);`
+        }
+      };
+    }
+    return {
+      members: {
+        columns: ['id', 'name', 'email', 'city', 'age'],
+        schema: membersSchema
+      }
+    };
+  }
+
+  getTableRef(dbKey, tableName) {
+    const tLower = tableName.toLowerCase();
+    const customMap = this.customTablesByDb[dbKey];
+    const customKey = Object.keys(customMap).find(k => k.toLowerCase() === tLower);
+    if (customKey) {
+      const c = customMap[customKey];
+      return {
+        name: customKey,
+        columns: c.columns,
+        schema: c.schema,
+        rows: c.rows,
+        setRows: (newRows) => { c.rows = newRows; },
+        isCustom: true
+      };
+    }
+    const builtins = this.getBuiltinSchema(dbKey);
+    if (!builtins[tLower]) return null;
+    if (tLower === 'members') {
+      const prop = dbKey === 'legacy' ? 'legacyMembers' : 'members';
+      return {
+        name: 'members',
+        columns: builtins.members.columns,
+        schema: builtins.members.schema,
+        rows: this[prop],
+        setRows: (newRows) => { this[prop] = newRows; },
+        isCustom: false
+      };
+    }
+    if (tLower === 'plans' && dbKey === 'legacy') {
+      return {
+        name: 'plans',
+        columns: builtins.plans.columns,
+        schema: builtins.plans.schema,
+        rows: this.plans,
+        setRows: (newRows) => { this.plans = newRows; },
+        isCustom: false
+      };
+    }
+    if (tLower === 'enrollments' && dbKey === 'legacy') {
+      return {
+        name: 'enrollments',
+        columns: builtins.enrollments.columns,
+        schema: builtins.enrollments.schema,
+        rows: this.legacyEnrollments,
+        setRows: (newRows) => { this.legacyEnrollments = newRows; },
+        isCustom: false
+      };
+    }
+    return null;
+  }
+
+  splitTopLevel(str, delimiter = ',') {
+    const items = [];
+    let curr = '';
+    let inQuote = null;
+    let parenDepth = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '\\' && i + 1 < str.length && inQuote) {
+        curr += ch + str[i + 1];
+        i++;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        if (inQuote === ch) {
+          if (str[i + 1] === ch) {
+            curr += ch + ch;
+            i++;
+            continue;
+          }
+          inQuote = null;
+        } else if (!inQuote) {
+          inQuote = ch;
+        }
+        curr += ch;
+        continue;
+      }
+      if (!inQuote) {
+        if (ch === '(') parenDepth++;
+        else if (ch === ')' && parenDepth > 0) parenDepth--;
+        else if (ch === delimiter && parenDepth === 0) {
+          items.push(curr.trim());
+          curr = '';
+          continue;
+        }
+      }
+      curr += ch;
+    }
+    if (curr.trim() || items.length > 0) items.push(curr.trim());
+    return items;
+  }
+
+  parseLiteral(raw) {
+    const t = raw.trim();
+    if (/^NULL$/i.test(t)) return null;
+    if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith('"') && t.endsWith('"'))) {
+      return t.slice(1, -1).replace(/''/g, "'");
+    }
+    if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+    return t;
+  }
+
+  splitOutsideQuotes(str, kwRegex) {
+    // Splits by keyword regex only at top-level (outside quotes and parens)
+    const parts = [];
+    let lastIdx = 0;
+    let inQuote = null;
+    let parenDepth = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === "'" || ch === '"') {
+        inQuote = inQuote === ch ? null : (inQuote || ch);
+        continue;
+      }
+      if (inQuote) continue;
+      if (ch === '(') { parenDepth++; continue; }
+      if (ch === ')' && parenDepth > 0) { parenDepth--; continue; }
+      if (parenDepth === 0) {
+        const sub = str.slice(i);
+        const m = sub.match(kwRegex);
+        if (m && (i === 0 || /\s/.test(str[i - 1]))) {
+          parts.push(str.slice(lastIdx, i).trim());
+          i += m[0].length - 1;
+          lastIdx = i + 1;
+        }
+      }
+    }
+    parts.push(str.slice(lastIdx).trim());
+    return parts.filter(Boolean);
+  }
+
+  resolveColVal(row, colRef) {
+    const clean = colRef.trim();
+    if (Object.prototype.hasOwnProperty.call(row, clean)) return row[clean];
+    const lower = clean.toLowerCase();
+    for (const k of Object.keys(row)) {
+      if (k.toLowerCase() === lower) return row[k];
+    }
+    if (!clean.includes('.')) {
+      for (const k of Object.keys(row)) {
+        const dotIdx = k.indexOf('.');
+        if (dotIdx !== -1 && k.slice(dotIdx + 1).toLowerCase() === lower) {
+          return row[k];
+        }
+      }
+    }
+    return undefined;
+  }
+
+  hasColumn(rowOrCols, colRef) {
+    const clean = colRef.trim().toLowerCase();
+    if (Array.isArray(rowOrCols)) {
+      return rowOrCols.some(c => c.toLowerCase() === clean || c.toLowerCase().endsWith('.' + clean));
+    }
+    return this.resolveColVal(rowOrCols, colRef) !== undefined;
+  }
+
+  evalWhere(expr, row, dbKey) {
+    if (!expr || !expr.trim()) return true;
+    let trimmed = expr.trim();
+    while (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+      let depth = 0;
+      let wrapsAll = true;
+      let inQ = null;
+      for (let i = 0; i < trimmed.length; i++) {
+        const ch = trimmed[i];
+        if (ch === "'" || ch === '"') inQ = inQ === ch ? null : (inQ || ch);
+        else if (!inQ) {
+          if (ch === '(') depth++;
+          else if (ch === ')') {
+            depth--;
+            if (depth === 0 && i < trimmed.length - 1) { wrapsAll = false; break; }
+          }
+        }
+      }
+      if (wrapsAll) trimmed = trimmed.slice(1, -1).trim();
+      else break;
+    }
+
+    const orParts = this.splitOutsideQuotes(trimmed, /^OR(?=\s|\()/i);
+    if (orParts.length > 1) {
+      return orParts.some(p => this.evalWhere(p, row, dbKey));
+    }
+
+    // Avoid splitting BETWEEN a AND b
+    const andParts = [];
+    {
+      let lastIdx = 0;
+      let inQuote = null;
+      let parenDepth = 0;
+      let pendingBetween = false;
+      for (let i = 0; i < trimmed.length; i++) {
+        const ch = trimmed[i];
+        if (ch === "'" || ch === '"') { inQuote = inQuote === ch ? null : (inQuote || ch); continue; }
+        if (inQuote) continue;
+        if (ch === '(') { parenDepth++; continue; }
+        if (ch === ')' && parenDepth > 0) { parenDepth--; continue; }
+        if (parenDepth === 0 && (i === 0 || /\s/.test(trimmed[i - 1]))) {
+          const sub = trimmed.slice(i);
+          if (/^BETWEEN(?=\s)/i.test(sub)) {
+            pendingBetween = true;
+          } else if (/^AND(?=\s|\()/i.test(sub)) {
+            if (pendingBetween) {
+              pendingBetween = false;
+            } else {
+              andParts.push(trimmed.slice(lastIdx, i).trim());
+              i += 2;
+              lastIdx = i + 1;
+            }
+          }
+        }
+      }
+      andParts.push(trimmed.slice(lastIdx).trim());
+    }
+    if (andParts.length > 1) {
+      return andParts.every(p => this.evalWhere(p, row, dbKey));
+    }
+
+    if (/^NOT\s+/i.test(trimmed)) {
+      return !this.evalWhere(trimmed.slice(4), row, dbKey);
+    }
+
+    // IS [NOT] NULL
+    const isNullMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+IS\s+(NOT\s+)?NULL$/i);
+    if (isNullMatch) {
+      const val = this.resolveColVal(row, isNullMatch[1]);
+      const isNull = val === null || val === undefined || val === '';
+      return isNullMatch[2] ? !isNull : isNull;
+    }
+
+    // NOT EXISTS (subquery)
+    const existsMatch = trimmed.match(/^(NOT\s+)?EXISTS\s*\((SELECT\s+.+)\)$/is);
+    if (existsMatch) {
+      const subRes = this.runSelect(existsMatch[2], dbKey, false, true);
+      const hasAny = subRes && subRes.rows && subRes.rows.length > 0;
+      return existsMatch[1] ? !hasAny : hasAny;
+    }
+
+    // BETWEEN
+    const betweenMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+(NOT\s+)?BETWEEN\s+(.+?)\s+AND\s+(.+)$/is);
+    if (betweenMatch) {
+      const val = this.resolveColVal(row, betweenMatch[1]);
+      if (val === null || val === undefined) return false;
+      const minV = this.parseLiteral(betweenMatch[3]);
+      const maxV = this.parseLiteral(betweenMatch[4]);
+      const inRange = Number(val) >= Number(minV) && Number(val) <= Number(maxV);
+      return betweenMatch[2] ? !inRange : inRange;
+    }
+
+    // [NOT] IN (...)
+    const inMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+(NOT\s+)?IN\s*\((.+)\)$/is);
+    if (inMatch) {
+      const val = this.resolveColVal(row, inMatch[1]);
+      if (val === null || val === undefined) return false;
+      const inner = inMatch[3].trim();
+      let candidates;
+      if (/^SELECT\s+/i.test(inner)) {
+        const subRes = this.runSelect(inner, dbKey, false, true);
+        candidates = (subRes && subRes.rows ? subRes.rows : []).map(r => Object.values(r)[0]);
+      } else {
+        candidates = this.splitTopLevel(inner, ',').map(v => this.parseLiteral(v));
+      }
+      const matched = candidates.some(c => c !== null && String(c).toLowerCase() === String(val).toLowerCase());
+      return inMatch[2] ? !matched : matched;
+    }
+
+    // [NOT] LIKE
+    const likeMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+(NOT\s+)?LIKE\s+(['"].*['"])$/is);
+    if (likeMatch) {
+      const val = this.resolveColVal(row, likeMatch[1]);
+      if (val === null || val === undefined) return false;
+      const pattern = String(this.parseLiteral(likeMatch[3]));
+      const regexStr = '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$';
+      const matched = new RegExp(regexStr, 'i').test(String(val));
+      return likeMatch[2] ? !matched : matched;
+    }
+
+    // Binary comparison: col op val (where val can be another column or literal)
+    const cmpMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*(=|!=|<>|>=|<=|>|<)\s*(.+)$/s);
+    if (cmpMatch) {
+      const left = this.resolveColVal(row, cmpMatch[1]);
+      const op = cmpMatch[2];
+      const rightRaw = cmpMatch[3].trim();
+      const isColRef = /^[A-Za-z_][A-Za-z0-9_.]*$/.test(rightRaw) && !/^NULL$/i.test(rightRaw) && this.hasColumn(row, rightRaw);
+      const right = isColRef ? this.resolveColVal(row, rightRaw) : this.parseLiteral(rightRaw);
+
+      // SQL NULL comparison with = / != is always unknown (false)
+      if (left === null || left === undefined || right === null || right === undefined) {
+        return false;
+      }
+
+      const numL = Number(left);
+      const numR = Number(right);
+      const bothNum = typeof left === 'number' || typeof right === 'number' || (!Number.isNaN(numL) && !Number.isNaN(numR) && left !== '' && right !== '');
+
+      if (op === '=') return bothNum ? numL === numR : String(left).toLowerCase() === String(right).toLowerCase();
+      if (op === '!=' || op === '<>') return bothNum ? numL !== numR : String(left).toLowerCase() !== String(right).toLowerCase();
+      if (op === '>') return bothNum ? numL > numR : String(left) > String(right);
+      if (op === '>=') return bothNum ? numL >= numR : String(left) >= String(right);
+      if (op === '<') return bothNum ? numL < numR : String(left) < String(right);
+      if (op === '<=') return bothNum ? numL <= numR : String(left) <= String(right);
+    }
+
+    throw new Error(`near "${trimmed.split(/\s+/)[0]}": syntax error`);
+  }
+
+  evalSelectExpr(expr, rowsForGroup, allColNames) {
+    const clean = expr.trim().replace(/\s+AS\s+\w+$/i, '').trim();
+    const aggMatch = clean.match(/^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(\*|[A-Za-z_][A-Za-z0-9_.]*)\s*\)$/i);
+    if (aggMatch) {
+      const fn = aggMatch[1].toUpperCase();
+      const target = aggMatch[2];
+      if (fn === 'COUNT') {
+        if (target === '*') return rowsForGroup.length;
+        return rowsForGroup.filter(r => {
+          const v = this.resolveColVal(r, target);
+          return v !== null && v !== undefined && v !== '';
+        }).length;
+      }
+      const nums = rowsForGroup
+        .map(r => this.resolveColVal(r, target))
+        .filter(v => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v)))
+        .map(Number);
+      if (nums.length === 0) return null;
+      if (fn === 'SUM') return nums.reduce((a, b) => a + b, 0);
+      if (fn === 'AVG') {
+        const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+        return Number.isInteger(avg) ? avg : Number(avg.toFixed(2));
+      }
+      if (fn === 'MIN') return Math.min(...nums);
+      if (fn === 'MAX') return Math.max(...nums);
+    }
+    const row = rowsForGroup[0] || {};
+    if (!this.hasColumn(allColNames, clean)) {
+      throw new Error(`no such column: ${clean}`);
+    }
+    return this.resolveColVal(row, clean);
+  }
+
+  runSelect(rawQuery, dbKey, isCsv, returnRaw = false) {
+    const q = rawQuery.trim().replace(/;+$/, '').trim();
+    // Parse clauses using top-level clause keywords
+    const clauseRegex = /\b(FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT)\b/gi;
+    const selectMatch = q.match(/^SELECT\s+(DISTINCT\s+)?(.+?)(?:\s+FROM\s+(.+))?$/is);
+    if (!selectMatch || !selectMatch[3]) {
+      return { output: `Error: near "${q.split(/\s+/)[0]}": syntax error`, type: 'error', code: 1 };
+    }
+
+    const isDistinct = Boolean(selectMatch[1]);
+    const selectListRaw = selectMatch[2].trim();
+    const afterFrom = selectMatch[3].trim();
+
+    // Find top-level WHERE / GROUP BY / HAVING / ORDER BY / LIMIT
+    const findClausePositions = (str) => {
+      const found = [];
+      let inQ = null;
+      let paren = 0;
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === "'" || ch === '"') { inQ = inQ === ch ? null : (inQ || ch); continue; }
+        if (inQ) continue;
+        if (ch === '(') { paren++; continue; }
+        if (ch === ')' && paren > 0) { paren--; continue; }
+        if (paren === 0 && (i === 0 || /\s/.test(str[i - 1]))) {
+          const sub = str.slice(i);
+          const m = sub.match(/^(WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT)(?=\s)/i);
+          if (m) {
+            found.push({ kw: m[1].toUpperCase().replace(/\s+/g, ' '), start: i, bodyStart: i + m[0].length });
+          }
+        }
+      }
+      return found;
+    };
+
+    const positions = findClausePositions(afterFrom);
+    const fromClause = (positions.length > 0 ? afterFrom.slice(0, positions[0].start) : afterFrom).trim();
+    const clauses = {};
+    for (let idx = 0; idx < positions.length; idx++) {
+      const end = idx + 1 < positions.length ? positions[idx + 1].start : afterFrom.length;
+      clauses[positions[idx].kw] = afterFrom.slice(positions[idx].bodyStart, end).trim();
+    }
+
+    // Parse FROM table + optional JOINs
+    const joinParts = [];
+    const joinTokenizer = /\b(LEFT\s+(?:OUTER\s+)?JOIN|INNER\s+JOIN|JOIN)\b/gi;
+    let lastPos = 0;
+    let jm;
+    let firstJoinType = null;
+    while ((jm = joinTokenizer.exec(fromClause)) !== null) {
+      const chunk = fromClause.slice(lastPos, jm.index).trim();
+      joinParts.push({ type: firstJoinType, raw: chunk });
+      firstJoinType = jm[1].toUpperCase().includes('LEFT') ? 'LEFT' : 'INNER';
+      lastPos = jm.index + jm[0].length;
+    }
+    joinParts.push({ type: firstJoinType, raw: fromClause.slice(lastPos).trim() });
+
+    const parseTableSpec = (spec) => {
+      const m = spec.match(/^(\w+)(?:\s+(?:AS\s+)?(\w+))?$/i);
+      if (!m) return null;
+      return { table: m[1], alias: m[2] || m[1] };
+    };
+
+    const baseSpec = parseTableSpec(joinParts[0].raw);
+    if (!baseSpec) return { output: 'Error: syntax error in FROM clause', type: 'error', code: 1 };
+    const baseRef = this.getTableRef(dbKey, baseSpec.table);
+    if (!baseRef) return { output: `Error: no such table: ${baseSpec.table}`, type: 'error', code: 1 };
+
+    const allColNames = [];
+    const prefixRow = (r, alias, cols) => {
+      const out = {};
+      for (const c of cols) {
+        out[c] = r[c];
+        out[`${alias}.${c}`] = r[c];
+      }
+      return out;
+    };
+    baseRef.columns.forEach(c => {
+      allColNames.push(c, `${baseSpec.alias}.${c}`);
+    });
+
+    let workingRows = baseRef.rows.map(r => prefixRow(r, baseSpec.alias, baseRef.columns));
+
+    for (let j = 1; j < joinParts.length; j++) {
+      const jType = joinParts[j].type;
+      const onMatch = joinParts[j].raw.match(/^(.+?)\s+ON\s+(.+)$/is);
+      if (!onMatch) return { output: 'Error: syntax error in JOIN ON clause', type: 'error', code: 1 };
+      const jSpec = parseTableSpec(onMatch[1].trim());
+      if (!jSpec) return { output: 'Error: syntax error in JOIN table', type: 'error', code: 1 };
+      const jRef = this.getTableRef(dbKey, jSpec.table);
+      if (!jRef) return { output: `Error: no such table: ${jSpec.table}`, type: 'error', code: 1 };
+
+      jRef.columns.forEach(c => {
+        allColNames.push(c, `${jSpec.alias}.${c}`);
+      });
+
+      const onExpr = onMatch[2].trim();
+      const nextRows = [];
+      const nullRight = {};
+      jRef.columns.forEach(c => {
+        nullRight[`${jSpec.alias}.${c}`] = null;
+      });
+
+      for (const leftRow of workingRows) {
+        let matchedAny = false;
+        for (const rRaw of jRef.rows) {
+          const rightPrefixed = {};
+          for (const c of jRef.columns) {
+            rightPrefixed[`${jSpec.alias}.${c}`] = rRaw[c];
+            if (!Object.prototype.hasOwnProperty.call(leftRow, c)) {
+              rightPrefixed[c] = rRaw[c];
+            }
+          }
+          const merged = { ...leftRow, ...rightPrefixed };
+          if (this.evalWhere(onExpr, merged, dbKey)) {
+            nextRows.push(merged);
+            matchedAny = true;
+          }
+        }
+        if (!matchedAny && jType === 'LEFT') {
+          nextRows.push({ ...leftRow, ...nullRight });
+        }
+      }
+      workingRows = nextRows;
+    }
+
+    // WHERE
+    if (clauses.WHERE) {
+      workingRows = workingRows.filter(r => this.evalWhere(clauses.WHERE, r, dbKey));
+    }
+
+    // Build projection list
+    const selectItems = selectListRaw === '*'
+      ? baseRef.columns
+      : this.splitTopLevel(selectListRaw, ',');
+
+    const hasAgg = selectItems.some(item => /^(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(item.trim()));
+    const groupByCol = clauses['GROUP BY'] ? clauses['GROUP BY'].trim() : null;
+
+    let projectedRows = [];
+    if (groupByCol) {
+      if (!this.hasColumn(allColNames, groupByCol)) {
+        return { output: `Error: no such column: ${groupByCol}`, type: 'error', code: 1 };
+      }
+      const groups = new Map();
+      for (const r of workingRows) {
+        const keyVal = this.resolveColVal(r, groupByCol);
+        const mapKey = String(keyVal);
+        if (!groups.has(mapKey)) groups.set(mapKey, []);
+        groups.get(mapKey).push(r);
+      }
+      for (const [, gRows] of groups.entries()) {
+        if (clauses.HAVING) {
+          const hMatch = clauses.HAVING.match(/^((?:COUNT|SUM|AVG|MIN|MAX)\s*\([^)]+\)|[A-Za-z_][A-Za-z0-9_.]*)\s*(=|!=|<>|>=|<=|>|<)\s*(.+)$/i);
+          if (hMatch) {
+            const leftVal = this.evalSelectExpr(hMatch[1], gRows, allColNames);
+            const rightVal = this.parseLiteral(hMatch[3]);
+            const op = hMatch[2];
+            let ok = false;
+            if (op === '=') ok = Number(leftVal) === Number(rightVal);
+            else if (op === '!=' || op === '<>') ok = Number(leftVal) !== Number(rightVal);
+            else if (op === '>') ok = Number(leftVal) > Number(rightVal);
+            else if (op === '>=') ok = Number(leftVal) >= Number(rightVal);
+            else if (op === '<') ok = Number(leftVal) < Number(rightVal);
+            else if (op === '<=') ok = Number(leftVal) <= Number(rightVal);
+            if (!ok) continue;
+          }
+        }
+        const outObj = {};
+        const vals = selectItems.map((item, i) => {
+          const v = this.evalSelectExpr(item, gRows, allColNames);
+          outObj[item] = v;
+          outObj[`_col${i}`] = v;
+          return v;
+        });
+        projectedRows.push({ vals, raw: gRows[0], outObj });
+      }
+    } else if (hasAgg) {
+      const outObj = {};
+      const vals = selectItems.map((item, i) => {
+        const v = this.evalSelectExpr(item, workingRows, allColNames);
+        outObj[item] = v;
+        outObj[`_col${i}`] = v;
+        return v;
+      });
+      projectedRows.push({ vals, raw: workingRows[0] || {}, outObj });
+    } else {
+      for (const r of workingRows) {
+        const outObj = {};
+        const vals = selectItems.map((item, i) => {
+          const v = this.evalSelectExpr(item, [r], allColNames);
+          outObj[item] = v;
+          outObj[`_col${i}`] = v;
+          return v;
+        });
+        projectedRows.push({ vals, raw: r, outObj });
+      }
+    }
+
+    // ORDER BY
+    if (clauses['ORDER BY']) {
+      const orderSpecs = this.splitTopLevel(clauses['ORDER BY'], ',').map(s => {
+        const m = s.match(/^(.+?)(?:\s+(ASC|DESC))?$/i);
+        return { col: m[1].trim(), desc: (m[2] || '').toUpperCase() === 'DESC' };
+      });
+      for (const spec of orderSpecs) {
+        if (!this.hasColumn(allColNames, spec.col) && !projectedRows.some(p => Object.prototype.hasOwnProperty.call(p.outObj, spec.col))) {
+          return { output: `Error: no such column: ${spec.col}`, type: 'error', code: 1 };
+        }
+      }
+      projectedRows.sort((a, b) => {
+        for (const spec of orderSpecs) {
+          let va = this.resolveColVal(a.raw, spec.col);
+          if (va === undefined) va = a.outObj[spec.col];
+          let vb = this.resolveColVal(b.raw, spec.col);
+          if (vb === undefined) vb = b.outObj[spec.col];
+          if (va === vb) continue;
+          if (va === null || va === undefined) return spec.desc ? 1 : -1;
+          if (vb === null || vb === undefined) return spec.desc ? -1 : 1;
+          let cmp;
+          if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+          else cmp = String(va).localeCompare(String(vb));
+          if (cmp !== 0) return spec.desc ? -cmp : cmp;
+        }
+        return 0;
+      });
+    }
+
+    // DISTINCT
+    if (isDistinct) {
+      const seen = new Set();
+      projectedRows = projectedRows.filter(p => {
+        const k = JSON.stringify(p.vals);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+
+    // LIMIT
+    if (clauses.LIMIT !== undefined) {
+      const lim = parseInt(clauses.LIMIT, 10);
+      if (Number.isNaN(lim) || lim < 0) {
+        return { output: 'Error: invalid LIMIT value', type: 'error', code: 1 };
+      }
+      projectedRows = projectedRows.slice(0, lim);
+    }
+
+    if (returnRaw) {
+      return { rows: projectedRows.map(p => p.outObj) };
+    }
+
+    const sep = isCsv ? ',' : '|';
+    const outLines = projectedRows.map(p => p.vals.map(v => (v === null || v === undefined ? '' : String(v))).join(sep));
+    return { output: outLines.join('\n'), code: 0 };
   }
 
   execute(args) {
     if (!args || args.length === 0) {
-      return { output: 'Uso: sqlite3 [opções] <banco.db> [comando/sql]', type: 'error' };
+      return { output: 'Uso: sqlite3 [opções] <banco.db> [comando/sql]', type: 'error', code: 1 };
     }
 
     let isCsv = false;
     const cleanArgs = [];
     for (const a of args) {
       if (a === '-csv') isCsv = true;
+      else if (a === '-header' || a === '-noheader') continue;
       else cleanArgs.push(a);
     }
 
     const dbFile = cleanArgs[0];
     const query = cleanArgs.slice(1).join(' ').trim().replace(/^["']|["']$/g, '');
-
-    const isLegacy = dbFile && dbFile.includes('legacy');
+    const dbKey = this.getDbKey(dbFile);
 
     if (!query) {
-      return { output: `SQLite version 3.42.0\nEnter ".help" for usage hints.\nConnected to a transient in-memory database.` };
+      return { output: `SQLite version 3.42.0\nEnter ".help" for usage hints.\nConnected to a transient in-memory database.`, code: 0 };
     }
 
     if (query === '.tables') {
-      const base = isLegacy ? ['enrollments', 'members', 'plans'] : ['members'];
-      const custom = Object.keys(this.customTables || {});
+      const base = dbKey === 'legacy' ? ['enrollments', 'members', 'plans'] : ['members'];
+      const custom = Object.keys(this.customTablesByDb[dbKey] || {});
       const all = Array.from(new Set([...base, ...custom])).sort();
-      return { output: all.join('  ') };
+      return { output: all.join('  '), code: 0 };
     }
 
     if (query.startsWith('.schema')) {
       const parts = query.split(/\s+/);
       const targetTable = parts[1];
-      if (targetTable && this.customTables && this.customTables[targetTable]) {
-        return { output: this.customTables[targetTable].schema };
+      const builtins = this.getBuiltinSchema(dbKey);
+      const customMap = this.customTablesByDb[dbKey] || {};
+      if (targetTable) {
+        const ref = this.getTableRef(dbKey, targetTable);
+        if (!ref) return { output: '', code: 0 };
+        return { output: ref.schema, code: 0 };
       }
-      const customSchemas = Object.values(this.customTables || {}).map(t => t.schema).join('\n');
-      if (isLegacy) {
-        return {
-          output: `CREATE TABLE members (
-    id    INTEGER PRIMARY KEY,
-    name  TEXT NOT NULL,
-    email TEXT,
-    city  TEXT NOT NULL,
-    age   INTEGER NOT NULL
-);
-CREATE TABLE plans (
-    id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    monthly_fee INTEGER NOT NULL
-);
-CREATE TABLE enrollments (
-    id         INTEGER PRIMARY KEY,
-    member_id  INTEGER NOT NULL,
-    plan_id    INTEGER NOT NULL,
-    started_at TEXT NOT NULL,
-    ended_at   TEXT
-);${customSchemas ? '\n' + customSchemas : ''}`
-        };
-      }
-      return {
-        output: `CREATE TABLE members (
-    id    INTEGER PRIMARY KEY,
-    name  TEXT NOT NULL,
-    email TEXT,
-    city  TEXT NOT NULL,
-    age   INTEGER NOT NULL
-);${customSchemas ? '\n' + customSchemas : ''}`
-      };
+      const allSchemas = [
+        ...Object.values(builtins).map(b => b.schema),
+        ...Object.values(customMap).map(c => c.schema)
+      ];
+      return { output: allSchemas.join('\n'), code: 0 };
     }
 
-    const upperQ = query.toUpperCase();
+    if (query.startsWith('.')) {
+      return { output: `Error: unknown command or invalid arguments:  "${query.split(/\s+/)[0]}". Enter ".help" for help`, type: 'error', code: 1 };
+    }
 
-    // CREATE TABLE query
-    const createMatch = query.match(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\((.+)\);?$/is);
+    // CREATE TABLE
+    const createMatch = query.match(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\((.+)\)\s*;?$/is);
     if (createMatch) {
       const tableName = createMatch[1];
-      const colDefs = createMatch[2].split(',').map(c => c.trim().split(/\s+/)[0]);
-      if (!this.customTables) this.customTables = {};
-      this.customTables[tableName] = {
+      const colDefs = this.splitTopLevel(createMatch[2], ',').map(c => c.trim().split(/\s+/)[0]).filter(Boolean);
+      this.customTablesByDb[dbKey][tableName] = {
         schema: query.endsWith(';') ? query : query + ';',
         columns: colDefs,
         rows: []
       };
-      return { output: '' };
+      return { output: '', code: 0 };
     }
 
-    // INSERT INTO query
-    const insertMatch = query.match(/^INSERT\s+INTO\s+(\w+)\s*(?:\(([^)]+)\))?\s*VALUES\s*\((.+)\);?$/is);
+    // DROP TABLE
+    const dropMatch = query.match(/^DROP\s+TABLE\s+(IF\s+EXISTS\s+)?(\w+)\s*;?$/is);
+    if (dropMatch) {
+      const tName = dropMatch[2];
+      const existing = Object.keys(this.customTablesByDb[dbKey]).find(k => k.toLowerCase() === tName.toLowerCase());
+      if (!existing && !dropMatch[1]) {
+        return { output: `Error: no such table: ${tName}`, type: 'error', code: 1 };
+      }
+      if (existing) delete this.customTablesByDb[dbKey][existing];
+      return { output: '', code: 0 };
+    }
+
+    // INSERT INTO
+    const insertMatch = query.match(/^INSERT\s+INTO\s+(\w+)\s*(?:\(([^)]+)\))?\s*VALUES\s*\((.+)\)\s*;?$/is);
     if (insertMatch) {
       const tableName = insertMatch[1];
-      const explicitCols = insertMatch[2] ? insertMatch[2].split(',').map(c => c.trim()) : null;
-      const rawVals = insertMatch[3].split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''));
-
-      if (this.customTables && this.customTables[tableName]) {
-        const table = this.customTables[tableName];
-        const row = {};
-        const cols = explicitCols || table.columns;
-        cols.forEach((col, idx) => {
-          row[col] = rawVals[idx] !== undefined ? rawVals[idx] : null;
-        });
-        table.rows.push(row);
-        return { output: '' };
+      const ref = this.getTableRef(dbKey, tableName);
+      if (!ref) {
+        return { output: `Error: no such table: ${tableName}`, type: 'error', code: 1 };
       }
-
-      if (tableName.toLowerCase() === 'members') {
-        const targetList = isLegacy ? this.legacyMembers : this.members;
-        const maxId = targetList.reduce((acc, m) => Math.max(acc, m.id || 0), 0);
-        const row = { id: maxId + 1, name: '', email: null, city: 'Desconhecida', age: 25 };
-        const cols = explicitCols || ['id', 'name', 'email', 'city', 'age'];
-        cols.forEach((col, idx) => {
-          const val = rawVals[idx];
-          const key = col.trim().toLowerCase();
-          if (val === undefined || val.toUpperCase() === 'NULL') {
-            if (key === 'email') row.email = null;
-            return;
-          }
-          if (key === 'id' || key === 'age') row[key] = parseInt(val, 10);
-          else row[key] = val;
-        });
-        targetList.push(row);
-        return { output: '' };
+      const explicitCols = insertMatch[2] ? this.splitTopLevel(insertMatch[2], ',').map(c => c.trim()) : null;
+      const rawVals = this.splitTopLevel(insertMatch[3], ',').map(v => this.parseLiteral(v));
+      const cols = explicitCols || ref.columns;
+      if (rawVals.length !== cols.length) {
+        return { output: `Error: table ${tableName} has ${cols.length} columns but ${rawVals.length} values were supplied`, type: 'error', code: 1 };
       }
-      return { output: '' };
-    }
-
-    // DELETE FROM query
-    const deleteMatch = query.match(/^DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?;?$/is);
-    if (deleteMatch) {
-      const tableName = deleteMatch[1].toLowerCase();
-      const whereClause = deleteMatch[2] ? deleteMatch[2].trim() : null;
-      const matchesCond = (row) => {
-        if (!whereClause) return true;
-        const eq = whereClause.match(/^(\w+)\s*=\s*['"]?([^'"]+)['"]?$/i);
-        if (!eq) return false;
-        const col = eq[1].toLowerCase();
-        const val = eq[2];
-        return String(row[col]) === val;
-      };
-      if (this.customTables && this.customTables[deleteMatch[1]]) {
-        this.customTables[deleteMatch[1]].rows = whereClause
-          ? this.customTables[deleteMatch[1]].rows.filter(r => !matchesCond(r))
-          : [];
-        return { output: '' };
+      const row = {};
+      if (!ref.isCustom && ref.name === 'members') {
+        const maxId = ref.rows.reduce((acc, m) => Math.max(acc, m.id || 0), 0);
+        Object.assign(row, { id: maxId + 1, name: '', email: null, city: 'Desconhecida', age: 25 });
       }
-      if (tableName === 'members') {
-        if (isLegacy) {
-          this.legacyMembers = this.legacyMembers.filter(m => !matchesCond(m));
-        } else {
-          this.members = this.members.filter(m => !matchesCond(m));
-        }
-      }
-      return { output: '' };
-    }
-
-    // DROP TABLE query
-    const dropMatch = query.match(/^DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+);?$/is);
-    if (dropMatch) {
-      if (this.customTables) delete this.customTables[dropMatch[1]];
-      return { output: '' };
-    }
-
-    // UPDATE query
-    if (upperQ.startsWith('UPDATE')) {
-      const match = query.match(/UPDATE\s+(\w+)\s+SET\s+(\w+)\s*=\s*['"]?([^'"]+)['"]?\s+WHERE\s+(.+);?/i);
-      if (match) {
-        const [, table, col, val, cond] = match;
-        const targetList = isLegacy ? this.legacyMembers : this.members;
-        let count = 0;
-        if (cond.toLowerCase().includes('id = 3') || cond.toLowerCase().includes('id=3')) {
-          const item = targetList.find(m => m.id === 3);
-          if (item) {
-            item[col] = val;
-            count++;
-          }
-        }
-        return { output: '' };
-      }
-    }
-
-    // SELECT COUNT(*) FROM members WHERE id = 3
-    if (upperQ.includes('COUNT') && (upperQ.includes('WHERE ID = 3') || upperQ.includes('WHERE ID=3'))) {
-      return { output: '1' };
-    }
-
-    // SELECT COUNT(*) FROM members;
-    if (upperQ.includes('COUNT(*)') && !upperQ.includes('WHERE') && !upperQ.includes('GROUP')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      return { output: String(targetList.length) };
-    }
-
-    // SELECT COUNT(*) FROM members WHERE age >= 20;
-    if (upperQ.includes('COUNT(*)') && upperQ.includes('AGE >= 20')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const count = targetList.filter(m => m.age >= 20).length;
-      return { output: String(count) };
-    }
-
-    // SELECT COUNT(*) FROM members WHERE age > 20;
-    if (upperQ.includes('COUNT(*)') && upperQ.includes('AGE > 20')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const count = targetList.filter(m => m.age > 20).length;
-      return { output: String(count) };
-    }
-
-    // LIKE query (ex: WHERE email LIKE '%@example.com' ou WHERE name LIKE 'K%')
-    const likeMatch = query.match(/SELECT\s+(.+?)\s+FROM\s+(\w+)\s+WHERE\s+(\w+)\s+LIKE\s+['"]([^'"]+)['"]/i);
-    if (likeMatch) {
-      const [, selectCols, tbl, col, pattern] = likeMatch;
-      const list = tbl.toLowerCase() === 'plans' ? this.plans : (isLegacy ? this.legacyMembers : this.members);
-      const regexStr = '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$';
-      const regex = new RegExp(regexStr, 'i');
-      const cols = selectCols.split(',').map(c => c.trim().toLowerCase());
-      const rows = list
-        .filter(r => r[col.toLowerCase()] !== null && r[col.toLowerCase()] !== undefined && regex.test(String(r[col.toLowerCase()])))
-        .map(r => cols.map(c => r[c] ?? '').join(isCsv ? ',' : '|'));
-      return { output: rows.join('\n') };
-    }
-
-    // BETWEEN / IN queries on members
-    const betweenMatch = query.match(/SELECT\s+(.+?)\s+FROM\s+members\s+WHERE\s+(\w+)\s+BETWEEN\s+(\d+)\s+AND\s+(\d+)/i);
-    if (betweenMatch) {
-      const [, selectCols, col, minV, maxV] = betweenMatch;
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const cols = selectCols.split(',').map(c => c.trim().toLowerCase());
-      const rows = targetList
-        .filter(m => Number(m[col.toLowerCase()]) >= Number(minV) && Number(m[col.toLowerCase()]) <= Number(maxV))
-        .map(m => cols.map(c => m[c] ?? '').join(isCsv ? ',' : '|'));
-      return { output: rows.join('\n') };
-    }
-
-    const inMatch = query.match(/SELECT\s+(.+?)\s+FROM\s+members\s+WHERE\s+(\w+)\s+IN\s*\(([^)]+)\)/i);
-    if (inMatch) {
-      const [, selectCols, col, rawList] = inMatch;
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const vals = rawList.split(',').map(v => v.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
-      const cols = selectCols.split(',').map(c => c.trim().toLowerCase());
-      const rows = targetList
-        .filter(m => vals.includes(String(m[col.toLowerCase()] || '').toLowerCase()))
-        .map(m => cols.map(c => m[c] ?? '').join(isCsv ? ',' : '|'));
-      return { output: rows.join('\n') };
-    }
-
-    // SUM / AVG / MIN / MAX aggregate queries
-    const aggMatch = query.match(/SELECT\s+(SUM|AVG|MIN|MAX)\s*\(\s*(\w+)\s*\)\s+FROM\s+(\w+)/i);
-    if (aggMatch) {
-      const [, fn, col, tbl] = aggMatch;
-      const list = tbl.toLowerCase() === 'plans' ? this.plans : (isLegacy ? this.legacyMembers : this.members);
-      const nums = list.map(r => Number(r[col.toLowerCase()])).filter(n => !Number.isNaN(n));
-      if (nums.length === 0) return { output: '' };
-      const fnU = fn.toUpperCase();
-      let val = 0;
-      if (fnU === 'SUM') val = nums.reduce((a, b) => a + b, 0);
-      else if (fnU === 'AVG') val = nums.reduce((a, b) => a + b, 0) / nums.length;
-      else if (fnU === 'MIN') val = Math.min(...nums);
-      else if (fnU === 'MAX') val = Math.max(...nums);
-      return { output: Number.isInteger(val) ? String(val) : val.toFixed(2).replace(/\.00$/, '') };
-    }
-
-    // SELECT name FROM members WHERE city = 'Tokyo';
-    if (upperQ.includes('WHERE') && upperQ.includes('TOKYO')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const rows = targetList.filter(m => m.city.toLowerCase() === 'tokyo').map(m => m.name);
-      return { output: rows.join('\n') };
-    }
-
-    // SELECT name FROM members WHERE email IS NULL;
-    if (upperQ.includes('EMAIL IS NULL')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const rows = targetList.filter(m => m.email === null || m.email === '').map(m => m.name);
-      return { output: rows.join('\n') };
-    }
-
-    // SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;
-    if (upperQ.includes('ORDER BY') && upperQ.includes('LIMIT')) {
-      const targetList = [...(isLegacy ? this.legacyMembers : this.members)];
-      targetList.sort((a, b) => b.age - a.age || a.name.localeCompare(b.name));
-      const top3 = targetList.slice(0, 3);
-      const rows = top3.map(m => `${m.name}|${m.age}`);
-      return { output: rows.join('\n') };
-    }
-
-    // SELECT city, COUNT(*) FROM members GROUP BY city [HAVING COUNT(*) >= N];
-    if (upperQ.includes('GROUP BY') && upperQ.includes('CITY')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      const counts = {};
-      targetList.forEach(m => {
-        counts[m.city] = (counts[m.city] || 0) + 1;
+      cols.forEach((col, idx) => {
+        const matchedCol = ref.columns.find(c => c.toLowerCase() === col.toLowerCase()) || col;
+        row[matchedCol] = rawVals[idx];
       });
-      const havingMatch = query.match(/HAVING\s+COUNT\(\s*\*\s*\)\s*(>=|>|<=|<|=)\s*(\d+)/i);
-      const rows = Object.entries(counts)
-        .filter(([, count]) => {
-          if (!havingMatch) return true;
-          const op = havingMatch[1];
-          const num = parseInt(havingMatch[2], 10);
-          if (op === '>=') return count >= num;
-          if (op === '>') return count > num;
-          if (op === '<=') return count <= num;
-          if (op === '<') return count < num;
-          return count === num;
-        })
-        .map(([city, count]) => `${city}|${count}`);
-      return { output: rows.join('\n') };
+      ref.rows.push(row);
+      return { output: '', code: 0 };
     }
 
-    // SELECT city FROM members (for pipe to sort | uniq -c)
-    if (upperQ.includes('SELECT CITY FROM MEMBERS')) {
-      const targetList = isLegacy ? this.legacyMembers : this.members;
-      return { output: targetList.map(m => m.city).join('\n') };
-    }
-
-    // JOIN query: active enrollments
-    if (upperQ.includes('JOIN') && !upperQ.includes('LEFT') && upperQ.includes('ENDED_AT IS NULL')) {
-      const active = this.legacyEnrollments.filter(e => e.ended_at === null);
-      const rows = active.map(e => {
-        const member = this.legacyMembers.find(m => m.id === e.member_id);
-        const plan = this.plans.find(p => p.id === e.plan_id);
-        return `${member ? member.name : ''}|${plan ? plan.name : ''}`;
-      }).filter(r => !r.startsWith('|'));
-      return { output: rows.join('\n') };
-    }
-
-    // LEFT JOIN query: members without enrollments
-    if (upperQ.includes('LEFT JOIN') || upperQ.includes('WHERE E.ID IS NULL')) {
-      const enrolledIds = new Set(this.legacyEnrollments.map(e => e.member_id));
-      const unenrolled = this.legacyMembers.filter(m => !enrolledIds.has(m.id));
-      return { output: unenrolled.map(m => m.name).join('\n') };
-    }
-
-    // SELECT * FROM customTable, members, plans or enrollments
-    const selectAllMatch = query.match(/^SELECT\s+\*\s+FROM\s+(\w+)(?:\s+LIMIT\s+(\d+))?;?$/is);
-    if (selectAllMatch) {
-      const tableName = selectAllMatch[1];
-      const limit = selectAllMatch[2] ? parseInt(selectAllMatch[2], 10) : Infinity;
-      const sep = isCsv ? ',' : '|';
-      if (this.customTables && this.customTables[tableName]) {
-        const t = this.customTables[tableName];
-        const rows = t.rows.slice(0, limit).map(r => t.columns.map(c => r[c] ?? '').join(sep));
-        return { output: rows.join('\n') };
+    // UPDATE
+    const updateMatch = query.match(/^UPDATE\s+(\w+)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+?))?\s*;?$/is);
+    if (updateMatch) {
+      const [, tableName, setClause, whereClause] = updateMatch;
+      const ref = this.getTableRef(dbKey, tableName);
+      if (!ref) {
+        return { output: `Error: no such table: ${tableName}`, type: 'error', code: 1 };
       }
-      if (tableName.toLowerCase() === 'members') {
-        const targetList = isLegacy ? this.legacyMembers : this.members;
-        const rows = targetList.slice(0, limit).map(m => [m.id, m.name, m.email || '', m.city, m.age].join(sep));
-        return { output: rows.join('\n') };
-      }
-      if (tableName.toLowerCase() === 'plans') {
-        const rows = this.plans.slice(0, limit).map(p => [p.id, p.name, p.monthly_fee].join(sep));
-        return { output: rows.join('\n') };
-      }
-      if (tableName.toLowerCase() === 'enrollments') {
-        const rows = this.legacyEnrollments.slice(0, limit).map(e => [e.id, e.member_id, e.plan_id, e.started_at, e.ended_at || ''].join(sep));
-        return { output: rows.join('\n') };
+      const assignments = this.splitTopLevel(setClause, ',').map(a => {
+        const eqIdx = a.indexOf('=');
+        if (eqIdx === -1) throw new Error('near "SET": syntax error');
+        const col = a.slice(0, eqIdx).trim();
+        const matchedCol = ref.columns.find(c => c.toLowerCase() === col.toLowerCase());
+        if (!matchedCol) throw new Error(`no such column: ${col}`);
+        const val = this.parseLiteral(a.slice(eqIdx + 1));
+        return [matchedCol, val];
+      });
+      try {
+        for (const row of ref.rows) {
+          if (!whereClause || this.evalWhere(whereClause, row, dbKey)) {
+            for (const [col, val] of assignments) row[col] = val;
+          }
+        }
+        return { output: '', code: 0 };
+      } catch (err) {
+        return { output: `Error: ${err.message}`, type: 'error', code: 1 };
       }
     }
 
-    return { output: `Executado com sucesso.` };
+    // DELETE FROM
+    const deleteMatch = query.match(/^DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?\s*;?$/is);
+    if (deleteMatch) {
+      const [, tableName, whereClause] = deleteMatch;
+      const ref = this.getTableRef(dbKey, tableName);
+      if (!ref) {
+        return { output: `Error: no such table: ${tableName}`, type: 'error', code: 1 };
+      }
+      try {
+        const remaining = whereClause
+          ? ref.rows.filter(r => !this.evalWhere(whereClause, r, dbKey))
+          : [];
+        ref.setRows(remaining);
+        return { output: '', code: 0 };
+      } catch (err) {
+        return { output: `Error: ${err.message}`, type: 'error', code: 1 };
+      }
+    }
+
+    // SELECT
+    if (/^SELECT\s+/i.test(query)) {
+      try {
+        return this.runSelect(query, dbKey, isCsv, false);
+      } catch (err) {
+        return { output: `Error: ${err.message}`, type: 'error', code: 1 };
+      }
+    }
+
+    return { output: `Error: near "${query.split(/\s+/)[0]}": syntax error`, type: 'error', code: 1 };
   }
 }
 

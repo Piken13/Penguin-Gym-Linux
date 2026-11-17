@@ -5,6 +5,141 @@
  */
 
 class LessonChecker {
+  /**
+   * Divide uma linha de comando por &&, ||, ; ou & (fim de job) ou | respeitando aspas e subshells ().
+   */
+  static splitTopLevel(str, mode = 'seq') {
+    const parts = [];
+    let curr = '';
+    let inQuote = null;
+    let parenDepth = 0;
+
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '\\' && i + 1 < str.length && inQuote !== "'") {
+        curr += ch + str[i + 1];
+        i++;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        inQuote = inQuote === ch ? null : (inQuote || ch);
+        curr += ch;
+        continue;
+      }
+      if (inQuote) {
+        curr += ch;
+        continue;
+      }
+      if (ch === '(' && !(i > 0 && str[i - 1] === '$')) {
+        parenDepth++;
+        curr += ch;
+        continue;
+      }
+      if (ch === ')' && parenDepth > 0) {
+        parenDepth--;
+        curr += ch;
+        continue;
+      }
+      if (parenDepth === 0) {
+        if (mode === 'seq') {
+          if ((ch === '&' && str[i + 1] === '&') || (ch === '|' && str[i + 1] === '|')) {
+            if (curr.trim()) parts.push(curr.trim());
+            curr = '';
+            i++;
+            continue;
+          }
+          if (ch === ';') {
+            if (curr.trim()) parts.push(curr.trim());
+            curr = '';
+            continue;
+          }
+          if (ch === '&' && str[i + 1] !== '>' && str[i - 1] !== '>' && str[i - 1] !== '<') {
+            curr += '&';
+            if (curr.trim()) parts.push(curr.trim());
+            curr = '';
+            continue;
+          }
+        } else if (mode === 'pipe') {
+          if (ch === '|' && str[i + 1] !== '|' && str[i - 1] !== '>') {
+            if (curr.trim()) parts.push(curr.trim());
+            curr = '';
+            continue;
+          }
+        }
+      }
+      curr += ch;
+    }
+    if (curr.trim()) parts.push(curr.trim());
+    return parts;
+  }
+
+  /**
+   * Tokeniza um subcomando simples respeitando aspas.
+   */
+  static tokenize(cmdStr) {
+    const tokens = [];
+    let curr = '';
+    let inQuote = null;
+    let hasTok = false;
+    for (let i = 0; i < cmdStr.length; i++) {
+      const ch = cmdStr[i];
+      if (ch === '\\' && i + 1 < cmdStr.length && inQuote !== "'") {
+        curr += cmdStr[++i];
+        hasTok = true;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        inQuote = inQuote === ch ? null : (inQuote || ch);
+        hasTok = true;
+        continue;
+      }
+      if (/\s/.test(ch) && !inQuote) {
+        if (hasTok) {
+          tokens.push(curr);
+          curr = '';
+          hasTok = false;
+        }
+        continue;
+      }
+      curr += ch;
+      hasTok = true;
+    }
+    if (hasTok) tokens.push(curr);
+    return tokens;
+  }
+
+  /**
+   * Extrai comando bruto e comando efetivo (removendo sudo e flags do sudo).
+   */
+  static parseCall(segmentStr) {
+    const cleaned = segmentStr.replace(/&\s*$/, '').trim();
+    const tokens = LessonChecker.tokenize(cleaned);
+    const cmd = tokens[0] || '';
+    const args = tokens.slice(1);
+
+    let effIdx = 0;
+    if (tokens[0] === 'sudo') {
+      effIdx = 1;
+      while (effIdx < tokens.length && tokens[effIdx].startsWith('-')) {
+        if ((tokens[effIdx] === '-u' || tokens[effIdx] === '-g') && tokens[effIdx + 1]) {
+          effIdx += 2;
+        } else {
+          effIdx += 1;
+        }
+      }
+    }
+    const effCmd = tokens[effIdx] || cmd;
+    const effArgs = tokens.slice(effIdx + 1);
+    return { raw: cleaned, cmd, args, effCmd, effArgs };
+  }
+
+  static hasShortFlag(args, ch, longOpt = null) {
+    return args.some(a =>
+      (longOpt && a === longOpt) ||
+      (a.startsWith('-') && !a.startsWith('--') && a.includes(ch))
+    );
+  }
+
   static check(lesson, cmdLine, output, fs, ctx) {
     if (!lesson || !cmdLine) return false;
     if (ctx && ctx.res && ctx.res.type === 'error' && lesson.id !== 'bash-history-exec' && lesson.id !== 'bash-or-fallback') return false;
@@ -12,17 +147,26 @@ class LessonChecker {
     const sessionHistory = (ctx && ctx.sessionHistory) ? ctx.sessionHistory : [raw];
     const allSessionText = sessionHistory.join(' ; ');
 
-    // Pega o último comando individual (para quando há &&, || ou ;)
-    const subCommands = raw.split(/&&|\|\||;/).map(s => s.trim()).filter(Boolean);
+    const subCommands = LessonChecker.splitTopLevel(raw, 'seq');
     const lastSub = subCommands[subCommands.length - 1] || raw;
-    const tokens = lastSub.split(/\s+/);
-    const cmd = tokens[0] || '';
-    const args = tokens.slice(1);
+    const lastPipes = LessonChecker.splitTopLevel(lastSub, 'pipe');
+    const lastStage = lastPipes[lastPipes.length - 1] || lastSub;
+
+    const parsed = LessonChecker.parseCall(lastStage);
+    const { cmd, args, effCmd, effArgs } = parsed;
+    const pipelineCalls = lastPipes.map(p => LessonChecker.parseCall(p));
+    const allCalls = [];
+    for (const sub of subCommands) {
+      for (const p of LessonChecker.splitTopLevel(sub, 'pipe')) {
+        allCalls.push(LessonChecker.parseCall(p));
+      }
+    }
+    const hasCall = (calls, name) => calls.some(c => c.effCmd === name || c.cmd === name);
     const id = lesson.id;
 
     // Se o usuário está consultando documentação (man, whatis, apropos, help),
     // isso só deve ser avaliado como conclusão se a lição for especificamente sobre essa ferramenta.
-    const isDocLookup = cmd === 'man' || cmd === 'whatis' || cmd === 'apropos' || (cmd === 'help' && id !== 'basic-help');
+    const isDocLookup = effCmd === 'man' || effCmd === 'whatis' || effCmd === 'apropos' || (effCmd === 'help' && id !== 'basic-help');
     const isDocLesson = id === 'tool-man-page' || id === 'tool-whatis' || id === 'tool-apropos' || id === 'basic-help';
     if (isDocLookup && !isDocLesson) {
       return false;
@@ -35,107 +179,119 @@ class LessonChecker {
       // 1. INICIANTE (18 lições)
       // ==========================================
       case 'basic-pwd':
-        return cmd === 'pwd' && output.includes('/');
+        return effCmd === 'pwd' && output.includes('/');
 
       case 'basic-ls':
-        return cmd === 'ls' && !args.some(a => a.startsWith('-') && a.includes('a'));
+        return effCmd === 'ls' &&
+               !LessonChecker.hasShortFlag(effArgs, 'a', '--all') &&
+               output.includes('documents') && output.includes('projects') &&
+               effArgs.filter(a => !a.startsWith('-')).every(a => a === '.' || a === '~' || a === '/home/user');
 
       case 'basic-ls-all':
-        return cmd === 'ls' && args.some(a => a === '--all' || (a.startsWith('-') && a.includes('a')));
+        return effCmd === 'ls' && LessonChecker.hasShortFlag(effArgs, 'a', '--all');
 
       case 'basic-cd-home':
-        return cmd === 'cd' && fs.currentPath === '/home/user';
+        return effCmd === 'cd' && fs.currentPath === '/home/user';
 
       case 'basic-cd-parent':
-        return (allSessionText.includes('cd') && allSessionText.includes('..') && fs.currentPath === '/home/user') ||
-               (cmd === 'cd' && args[0] === '..');
+        return effCmd === 'cd' && effArgs[0] === '..' && fs.currentPath === '/home/user' &&
+               ((fs.oldPath && fs.oldPath.startsWith('/home/user/')) ||
+                allSessionText.includes('cd documents') ||
+                allSessionText.includes('cd projects'));
 
       case 'basic-whoami':
-        return cmd === 'whoami' && output.trim() === 'user';
+        return effCmd === 'whoami' && output.trim() === 'user';
 
       case 'basic-date':
-        return cmd === 'date' && output.length > 5;
+        return effCmd === 'date' && output.length > 5;
 
       case 'basic-echo':
-        return cmd === 'echo' && output.includes('Hello Linux');
+        return effCmd === 'echo' && output.trim() === 'Hello Linux';
 
       case 'basic-clear':
-        return cmd === 'clear';
+        return effCmd === 'clear';
 
       case 'basic-help':
-        return cmd === 'help' && (output.includes('Comandos') || output.includes('Disponíveis'));
+        return effCmd === 'help' && (output.includes('Comandos') || output.includes('Disponíveis'));
 
       case 'system-which':
-        return cmd === 'which' && args[0] === 'ls' && output.includes('/ls');
+        return effCmd === 'which' && effArgs[0] === 'ls' && output.includes('/ls');
 
       case 'system-which-grep':
-        return cmd === 'which' && args[0] === 'grep' && output.includes('/grep');
+        return effCmd === 'which' && effArgs[0] === 'grep' && output.includes('/grep');
 
       case 'advanced-ls-size-format':
-        return cmd === 'ls' &&
-               args.some(a => a === '--long' || (a.startsWith('-') && a.includes('l'))) &&
-               args.some(a => a === '--human-readable' || (a.startsWith('-') && a.includes('h')));
+        return effCmd === 'ls' &&
+               LessonChecker.hasShortFlag(effArgs, 'l', '--long') &&
+               LessonChecker.hasShortFlag(effArgs, 'h', '--human-readable');
 
       case 'text-head-basic':
-        return cmd === 'head' && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'head' && raw.includes('notes.txt') && output.length > 0;
 
       case 'text-tail-basic':
-        return cmd === 'tail' && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'tail' && raw.includes('notes.txt') && output.length > 0;
 
       case 'text-wc-lines':
-        return raw.includes('wc') && raw.includes('-l') && raw.includes('notes.txt') && output.length > 0;
+        return hasCall(allCalls, 'wc') &&
+               allCalls.some(c => c.effCmd === 'wc' && LessonChecker.hasShortFlag(c.effArgs, 'l', '--lines')) &&
+               raw.includes('notes.txt') && output.length > 0;
 
       case 'text-sort-basic':
-        return cmd === 'sort' && !args.includes('-r') && raw.includes('data.txt') && output.length > 0;
+        return effCmd === 'sort' && !LessonChecker.hasShortFlag(effArgs, 'r', '--reverse') && raw.includes('data.txt') && output.length > 0;
 
       case 'system-env-variables':
-        return (cmd === 'env' || cmd === 'printenv') && output.includes('USER=');
+        return ((effCmd === 'env' || effCmd === 'printenv') &&
+                (output.includes('USER=') || (effArgs.length > 0 && output.trim().length > 0))) ||
+               (effCmd === 'echo' && /\$(USER|PATH|HOME|SHELL)\b/.test(raw) && output.trim().length > 0);
 
       // ==========================================
       // 2. FUNDAMENTOS (41 lições)
       // ==========================================
       case 'file-mkdir': {
         const node = fs.getNode('/home/user/myproject') || fs.getNode(fs.resolvePath('myproject'));
-        return !!node && node.type === 'directory';
+        return hasCall(allCalls, 'mkdir') && !!node && node.type === 'directory';
       }
 
       case 'file-mkdir-p': {
         const node = fs.getNode('/home/user/projeto/src/utils') || fs.getNode(fs.resolvePath('projeto/src/utils'));
-        return raw.includes('mkdir') && raw.includes('-p') && !!node && node.type === 'directory';
+        return hasCall(allCalls, 'mkdir') &&
+               allCalls.some(c => c.effCmd === 'mkdir' && (LessonChecker.hasShortFlag(c.effArgs, 'p', '--parents'))) &&
+               !!node && node.type === 'directory';
       }
 
       case 'file-touch': {
         const node = fs.getNode('/home/user/test.txt') || fs.getNode(fs.resolvePath('test.txt'));
-        return !!node && node.type === 'file';
+        return hasCall(allCalls, 'touch') && !!node && node.type === 'file';
       }
 
       case 'file-cat':
-        return cmd === 'cat' && (raw.includes('readme.txt') || output.includes('README'));
+        return effCmd === 'cat' && (raw.includes('readme.txt') || output.includes('README'));
 
       case 'file-more':
-        return cmd === 'more' && raw.includes('readme.txt') && output.length > 0;
+        return effCmd === 'more' && raw.includes('readme.txt') && output.length > 0;
 
       case 'file-less':
-        return cmd === 'less' && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'less' && raw.includes('notes.txt') && output.length > 0;
 
       case 'tool-nano-edit':
         return Boolean(
           ctx && ctx.res && ctx.res.action === 'nano_saved' &&
           ctx.res.filePath && ctx.res.filePath.includes('script.sh') &&
-          fs.getNode('/home/user/script.sh') !== null
+          fs.getNode('/home/user/script.sh') !== null &&
+          fs.readFile('/home/user/script.sh').trim().length > 0
         );
 
       case 'tool-man-page':
-        return cmd === 'man' && args.includes('grep') && output.includes('GREP(1)');
+        return effCmd === 'man' && effArgs.includes('grep') && output.includes('GREP(1)');
 
       case 'tool-whatis':
-        return cmd === 'whatis' && args.includes('tar') && output.includes('tar (1)');
+        return effCmd === 'whatis' && effArgs.includes('tar') && output.includes('tar (1)');
 
       case 'tool-apropos':
-        return cmd === 'apropos' && output.includes('(');
+        return effCmd === 'apropos' && output.includes('(');
 
       case 'tool-neofetch':
-        return cmd === 'neofetch' && output.includes('Debian');
+        return effCmd === 'neofetch' && output.includes('Debian');
 
       case 'file-echo-write': {
         const helloFile = fs.getNode('/home/user/hello.txt') || fs.getNode(fs.resolvePath('hello.txt'));
@@ -144,57 +300,60 @@ class LessonChecker {
 
       case 'file-cp': {
         const backup = fs.getNode('/home/user/backup.txt') || fs.getNode(fs.resolvePath('backup.txt'));
-        return !!backup && backup.type === 'file';
+        const orig = fs.getNode('/home/user/documents/readme.txt');
+        return hasCall(allCalls, 'cp') && !!backup && backup.type === 'file' && (!orig || backup.content === orig.content);
       }
 
       case 'file-cp-dir': {
         const backupDir = fs.getNode('/home/user/documents_backup');
         const backupFile = fs.getNode('/home/user/documents_backup/readme.txt');
-        return raw.includes('cp') && (raw.includes('-r') || raw.includes('-R') || raw.includes('-a')) &&
+        return hasCall(allCalls, 'cp') &&
+               allCalls.some(c => c.effCmd === 'cp' && (LessonChecker.hasShortFlag(c.effArgs, 'r', '--recursive') || LessonChecker.hasShortFlag(c.effArgs, 'R') || LessonChecker.hasShortFlag(c.effArgs, 'a'))) &&
                !!backupDir && backupDir.type === 'directory' && !!backupFile;
       }
 
       case 'file-mv':
-        return fs.getNode('/home/user/downloads/test.sh') !== null && fs.getNode('/home/user/projects/test.sh') === null;
+        return hasCall(allCalls, 'mv') && fs.getNode('/home/user/downloads/test.sh') !== null && fs.getNode('/home/user/projects/test.sh') === null;
 
       case 'file-mv-rename':
-        return cmd === 'mv' && fs.getNode('/home/user/renomeado.txt') !== null && fs.getNode('/home/user/test.txt') === null;
+        return effCmd === 'mv' && fs.getNode('/home/user/renomeado.txt') !== null && fs.getNode('/home/user/test.txt') === null;
 
       case 'file-rm':
-        return raw.includes('rm') && fs.getNode('/home/user/documents/notes.txt') === null;
+        return hasCall(allCalls, 'rm') && fs.getNode('/home/user/documents/notes.txt') === null;
 
       case 'file-rmdir':
-        return (raw.includes('rmdir') || raw.includes('rm')) && fs.getNode('/home/user/downloads') === null;
+        return (hasCall(allCalls, 'rmdir') || hasCall(allCalls, 'rm')) && fs.getNode('/home/user/downloads') === null;
 
       case 'file-rm-recursive':
-        return cmd === 'rm' && (raw.includes('-r') || raw.includes('-R')) && fs.getNode('/home/user/pasta_antiga') === null;
+        return effCmd === 'rm' && (LessonChecker.hasShortFlag(effArgs, 'r', '--recursive') || LessonChecker.hasShortFlag(effArgs, 'R')) && fs.getNode('/home/user/pasta_antiga') === null;
 
       case 'file-grep':
-        return raw.includes('grep') && raw.includes('Linux') && output.includes('Linux');
+        return hasCall(allCalls, 'grep') && raw.includes('Linux') && raw.includes('readme.txt') && output.includes('Linux');
 
       case 'advanced-grep-invert':
-        return cmd === 'grep' && args.some(a => a.startsWith('-') && a.includes('v')) &&
+        return hasCall(allCalls, 'grep') &&
+               allCalls.some(c => c.effCmd === 'grep' && LessonChecker.hasShortFlag(c.effArgs, 'v', '--invert-match')) &&
                raw.includes('dados.txt') && output.includes('servidor1') && !output.includes('inativo');
 
       case 'file-find':
-        return cmd === 'find' && (raw.includes('txt') || output.includes('.txt'));
+        return effCmd === 'find' && (raw.includes('txt') || output.includes('.txt'));
 
       case 'permission-ls-l':
-        return cmd === 'ls' && args.some(a => a === '--long' || (a.startsWith('-') && a.includes('l')));
+        return effCmd === 'ls' && LessonChecker.hasShortFlag(effArgs, 'l', '--long');
 
       case 'permission-chmod': {
         const node = fs.getNode('/home/user/test.txt') || fs.getNode(fs.resolvePath('test.txt'));
-        return raw.includes('chmod') && (raw.includes('+x') || raw.includes('755') || raw.includes('777')) && (!!node && node.permissions.includes('x'));
+        return hasCall(allCalls, 'chmod') && !!node && node.permissions.includes('x');
       }
 
       case 'permission-chmod-octal': {
         const node = fs.getNode('/home/user/segredo.txt') || fs.getNode(fs.resolvePath('segredo.txt'));
-        return cmd === 'chmod' && raw.includes('600') && !!node && node.permissions === 'rw-------';
+        return effCmd === 'chmod' && /\b0?600\b/.test(raw) && !!node && node.permissions === 'rw-------';
       }
 
       case 'permission-chown': {
         const node = fs.getNode('/home/user/test.txt') || fs.getNode(fs.resolvePath('test.txt'));
-        return (raw.includes('sudo') || fs.sudoMode) && raw.includes('chown') && raw.includes('admin') && (!!node && node.owner === 'admin');
+        return (raw.includes('sudo') || fs.sudoMode) && hasCall(allCalls, 'chown') && raw.includes('admin') && (!!node && node.owner === 'admin');
       }
 
       case 'permission-sudo-basic':
@@ -203,49 +362,53 @@ class LessonChecker {
       case 'permission-sudo-mkdir': {
         const myfolder = fs.getNode('/opt/myfolder');
         return (cmd === 'sudo' || fs.sudoMode) &&
-               raw.includes('mkdir') &&
+               hasCall(allCalls, 'mkdir') &&
                myfolder !== null &&
                myfolder.type === 'directory';
       }
 
       case 'advanced-grep-ignore-case':
-        return raw.includes('grep') && args.some(a => a === '--ignore-case' || (a.startsWith('-') && a.includes('i'))) && raw.includes('readme.txt') && output.length > 0;
+        return hasCall(allCalls, 'grep') &&
+               allCalls.some(c => c.effCmd === 'grep' && LessonChecker.hasShortFlag(c.effArgs, 'i', '--ignore-case')) &&
+               raw.includes('readme.txt') && output.length > 0;
 
       case 'advanced-cat-line-numbers':
-        return cmd === 'cat' && args.some(a => a === '--number' || (a.startsWith('-') && a.includes('n'))) && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'cat' && LessonChecker.hasShortFlag(effArgs, 'n', '--number') && raw.includes('notes.txt') && output.length > 0;
 
       case 'advanced-cp-verbose':
-        return cmd === 'cp' && args.some(a => a === '--verbose' || (a.startsWith('-') && a.includes('v'))) && fs.getNode('/home/user/backup.txt') !== null;
+        return effCmd === 'cp' && LessonChecker.hasShortFlag(effArgs, 'v', '--verbose') && fs.getNode('/home/user/backup.txt') !== null;
 
       case 'text-cut-fields':
-        return raw.includes('cut') && raw.includes('-d') && raw.includes('-f') && raw.includes('notes.txt') && output.length > 0;
+        return hasCall(allCalls, 'cut') && raw.includes('-d') && raw.includes('-f') && raw.includes('notes.txt') && output.length > 0;
 
       case 'text-tr-transform':
-        return raw.includes('tr') && (raw.includes('<') || raw.includes('|')) && output.includes('PENGUIN GYM LINUX');
+        return hasCall(allCalls, 'tr') && (raw.includes('<') || raw.includes('|')) && output.includes('PENGUIN GYM LINUX');
 
       case 'text-head-lines':
-        return cmd === 'head' && (raw.includes('-n') || args.some(a => /^-\d+$/.test(a))) && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'head' && (effArgs.includes('-n') || effArgs.some(a => /^-n?\d+$/.test(a))) && raw.includes('notes.txt') && output.length > 0;
 
       case 'text-tail-lines':
-        return cmd === 'tail' && (raw.includes('-n') || args.some(a => /^-\d+$/.test(a))) && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'tail' && (effArgs.includes('-n') || effArgs.some(a => /^-n?\d+$/.test(a))) && raw.includes('notes.txt') && output.length > 0;
 
       case 'text-sort-reverse':
-        return cmd === 'sort' && args.some(a => a === '--reverse' || (a.startsWith('-') && a.includes('r'))) && raw.includes('data.txt') && output.length > 0;
+        return effCmd === 'sort' && LessonChecker.hasShortFlag(effArgs, 'r', '--reverse') && raw.includes('data.txt') && output.length > 0;
 
       case 'text-sort-numeric':
-        return cmd === 'sort' && args.some(a => a === '--numeric-sort' || (a.startsWith('-') && a.includes('n'))) && raw.includes('numeros.txt') && output.startsWith('2\n9\n25');
+        return effCmd === 'sort' && LessonChecker.hasShortFlag(effArgs, 'n', '--numeric-sort') && raw.includes('numeros.txt') && output.startsWith('2\n9\n25');
 
       case 'text-uniq-basic':
-        return raw.includes('uniq') && raw.includes('data.txt') && output.length > 0;
+        return hasCall(allCalls, 'uniq') && raw.includes('data.txt') && output.length > 0;
 
       case 'text-uniq-count':
-        return raw.includes('uniq') && args.some(a => a === '--count' || (a.startsWith('-') && a.includes('c'))) && raw.includes('data.txt') && output.length > 0;
+        return hasCall(allCalls, 'uniq') &&
+               allCalls.some(c => c.effCmd === 'uniq' && LessonChecker.hasShortFlag(c.effArgs, 'c', '--count')) &&
+               raw.includes('data.txt') && output.length > 0;
 
       case 'text-sort-uniq-combo':
-        return raw.includes('sort') && raw.includes('|') && raw.includes('uniq') && raw.includes('bagunca.txt') && output.includes('3 banana') && output.includes('2 apple');
+        return hasCall(pipelineCalls, 'sort') && hasCall(pipelineCalls, 'uniq') && raw.includes('bagunca.txt') && output.includes('3 banana') && output.includes('2 apple');
 
       case 'file-diff-comparison':
-        return cmd === 'diff' && raw.includes('readme.txt') && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'diff' && raw.includes('readme.txt') && raw.includes('notes.txt') && output.length > 0;
 
       // ==========================================
       // 3. SYSADMIN & SERVIÇOS (36 lições)
@@ -254,181 +417,197 @@ class LessonChecker {
         return (raw === 'sudo -i' || raw === 'sudo su' || raw === 'su -') && fs.sudoMode === true;
 
       case 'sys-session-exit':
-        return (raw === 'exit' || raw === 'logout') && (output.includes('exit') || output.includes('logout'));
+        return (effCmd === 'exit' || effCmd === 'logout') && (output.includes('exit') || output.includes('logout'));
 
       case 'sys-systemctl-status':
-        return raw.includes('systemctl') && raw.includes('status') && raw.includes('nginx') && output.includes('nginx.service');
+        return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('status') && raw.includes('nginx') && output.includes('nginx.service');
 
       case 'sys-systemctl-is-active':
-        return raw.includes('systemctl') && raw.includes('is-active') && raw.includes('nginx') && output.trim() === 'active';
+        return effCmd === 'systemctl' && effArgs[0] === 'is-active' && (effArgs[1] || '').replace(/\.service$/, '') === 'nginx' && output.trim() === 'active';
 
       case 'sys-systemctl-restart':
-        return raw.includes('systemctl') && raw.includes('restart') && raw.includes('nginx');
+        return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('restart') && raw.includes('nginx') &&
+               (commandEngine ? commandEngine.services.nginx.active === true : true);
 
       case 'sys-systemctl-stop':
-        return raw.includes('systemctl') && raw.includes('stop') && raw.includes('nginx') &&
+        return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('stop') && raw.includes('nginx') &&
                (commandEngine ? commandEngine.services.nginx.active === false : true);
 
       case 'sys-systemctl-start':
-        return raw.includes('systemctl') && raw.includes('start') && raw.includes('postgresql') &&
+        return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('start') && raw.includes('postgresql') &&
                (commandEngine ? commandEngine.services.postgresql.active === true : true);
 
       case 'sys-systemctl-enable':
-        return raw.includes('systemctl') && raw.includes('enable') && raw.includes('nginx') && output.includes('multi-user.target.wants');
+        return effCmd === 'systemctl' && effArgs[0] === 'enable' && (effArgs[1] || '').replace(/\.service$/, '') === 'nginx' &&
+               (commandEngine ? commandEngine.services.nginx.enabled === true : output.includes('multi-user.target.wants'));
 
       case 'sys-systemctl-disable':
-        return raw.includes('systemctl') && raw.includes('disable') && raw.includes('nginx') &&
+        return effCmd === 'systemctl' && effArgs[0] === 'disable' && (effArgs[1] || '').replace(/\.service$/, '') === 'nginx' &&
                (commandEngine ? commandEngine.services.nginx.enabled === false : output.includes('Removed'));
 
       case 'sys-journalctl-lines':
-        return raw.includes('journalctl') && raw.includes('-n') && output.split('\n').filter(Boolean).length <= 5;
+        return effCmd === 'journalctl' &&
+               effArgs.some(a => a === '-n' || /^-n\d+$/.test(a) || a.startsWith('--lines=')) &&
+               output.split('\n').filter(Boolean).length > 0 &&
+               output.split('\n').filter(Boolean).length <= 5;
 
       case 'sys-journalctl-unit':
-        return raw.includes('journalctl') && raw.includes('-u') && raw.includes('ssh') && output.includes('sshd');
+        return effCmd === 'journalctl' &&
+               effArgs.some(a => a === '-u' || a.startsWith('-u=') || a.startsWith('--unit=') || (a.startsWith('-u') && a.length > 2)) &&
+               raw.includes('ssh') && output.includes('sshd');
 
       case 'sys-apt-update':
-        return raw.includes('apt') && raw.includes('update') && output.includes('Lendo listas de pacotes');
+        return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('update') && output.includes('Lendo listas de pacotes');
 
       case 'sys-apt-upgrade':
-        return raw.includes('apt') && raw.includes('upgrade') && output.includes('Calculando atualização');
+        return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('upgrade') && output.includes('Calculando atualização');
 
       case 'sys-apt-search':
-        return raw.includes('apt') && raw.includes('search') && raw.includes('htop') && output.includes('htop');
+        return effCmd === 'apt' && effArgs.includes('search') && effArgs.includes('htop') && output.includes('htop');
 
       case 'sys-apt-show':
-        return raw.includes('apt') && raw.includes('show') && raw.includes('neofetch') && output.includes('Package: neofetch');
+        return effCmd === 'apt' && effArgs.includes('show') && effArgs.includes('neofetch') && output.includes('Package: neofetch');
 
       case 'sys-apt-install':
-        return raw.includes('apt') && raw.includes('install') && raw.includes('cowsay') && fs.getNode('/usr/bin/cowsay') !== null;
+        return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('install') && effArgs.includes('cowsay') && fs.getNode('/usr/bin/cowsay') !== null;
 
       case 'sys-apt-remove':
-        return raw.includes('apt') && raw.includes('remove') && raw.includes('cowsay') &&
+        return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('remove') && effArgs.includes('cowsay') &&
                (commandEngine ? !commandEngine.installedPackages.has('cowsay') : output.includes('Removendo cowsay'));
 
       case 'sys-apt-purge':
-        return raw.includes('apt') && raw.includes('purge') && raw.includes('cowsay') &&
+        return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('purge') && effArgs.includes('cowsay') &&
                output.includes('Expurgando') &&
                (commandEngine ? !commandEngine.installedPackages.has('cowsay') : true);
 
       case 'sys-apt-autoremove':
-        return raw.includes('apt') && raw.includes('autoremove') && output.includes('Lendo listas de pacotes');
+        return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('autoremove') && output.includes('Lendo listas de pacotes');
 
       case 'sys-dpkg-list':
-        return raw.includes('dpkg') && (args.includes('-l') || raw.includes('-l')) && output.includes('ii  ');
+        return effCmd === 'dpkg' && (effArgs.includes('-l') || effArgs.includes('--list')) && output.includes('ii  ');
 
       case 'sys-free-human':
-        return cmd === 'free' && (args.includes('-h') || raw.includes('-h')) && output.includes('Mem.:');
+        return effCmd === 'free' && LessonChecker.hasShortFlag(effArgs, 'h', '--human') && output.includes('Mem.:');
 
       case 'sys-lscpu':
-        return cmd === 'lscpu' && output.includes('x86_64');
+        return effCmd === 'lscpu' && output.includes('x86_64');
 
       case 'sys-lsblk':
-        return cmd === 'lsblk' && output.includes('sda');
+        return effCmd === 'lsblk' && output.includes('sda');
 
       case 'sys-id-user':
-        return cmd === 'id' && output.includes('uid=');
+        return effCmd === 'id' && output.includes('uid=');
 
       case 'sys-useradd':
-        return raw.includes('useradd') && raw.includes('devops') && (fs.getNode('/home/devops') !== null || fs.readFile('/etc/passwd').includes('devops'));
+        return effCmd === 'useradd' && effArgs.includes('devops') && (fs.getNode('/home/devops') !== null || fs.readFile('/etc/passwd').includes('devops:'));
 
       case 'sys-groupadd':
-        return raw.includes('groupadd') && raw.includes('deploy') && fs.readFile('/etc/group').includes('deploy:');
+        return effCmd === 'groupadd' && effArgs.includes('deploy') && fs.readFile('/etc/group').includes('deploy:');
 
       case 'sys-usermod-group':
-        return raw.includes('usermod') && raw.includes('deploy') && raw.includes('devops') &&
+        return effCmd === 'usermod' && effArgs.includes('deploy') && effArgs.includes('devops') &&
                fs.readFile('/etc/group').split('\n').some(l => l.startsWith('deploy:') && l.includes('devops'));
 
       case 'sys-groups-check':
-        return cmd === 'groups' && raw.includes('devops') && output.includes('deploy');
+        return effCmd === 'groups' && effArgs.includes('devops') && output.includes('deploy');
 
       case 'sys-passwd-user':
-        return raw.includes('passwd') && raw.includes('devops') && output.includes('atualizadas com sucesso');
+        return effCmd === 'passwd' && effArgs.includes('devops') && output.includes('atualizadas com sucesso');
 
       case 'sys-userdel':
-        return raw.includes('userdel') && raw.includes('-r') && raw.includes('devops') &&
+        return effCmd === 'userdel' && LessonChecker.hasShortFlag(effArgs, 'r', '--remove') && effArgs.includes('devops') &&
                !fs.readFile('/etc/passwd').split('\n').some(l => l.startsWith('devops:')) &&
                fs.getNode('/home/devops') === null;
 
       case 'sys-crontab-list':
-        return raw.includes('crontab') && (args.includes('-l') || raw.includes('-l')) && output.includes('backup.sh');
+        return effCmd === 'crontab' && effArgs.includes('-l') && output.includes('backup.sh');
 
       case 'sys-crontab-edit':
-        return Boolean(ctx && ctx.res && ctx.res.action === 'nano_saved' && ctx.res.crontabMode === true);
+        return Boolean(
+          ctx && ctx.res && ctx.res.action === 'nano_saved' && ctx.res.crontabMode === true &&
+          (!commandEngine || (commandEngine.userCrontab.trim().length > 0 &&
+            commandEngine.userCrontab !== '# m h  dom mon dow   command\n0 3 * * * /usr/local/bin/backup.sh\n'))
+        );
 
       case 'sys-crontab-remove':
-        return cmd === 'crontab' && args.includes('-r') && (commandEngine ? commandEngine.userCrontab === '' : true);
+        return effCmd === 'crontab' && effArgs.includes('-r') && (commandEngine ? commandEngine.userCrontab === '' : true);
 
       case 'sys-dmesg':
-        return cmd === 'dmesg' && output.includes('Linux version');
+        return effCmd === 'dmesg' && output.includes('Linux version');
 
       case 'system-uname':
-        return cmd === 'uname' && (args.includes('-a') || args.includes('--all')) && output.includes('Linux') && output.includes('x86_64');
+        return effCmd === 'uname' && (effArgs.includes('-a') || effArgs.includes('--all')) && output.includes('Linux') && output.includes('x86_64');
 
       case 'system-uptime':
-        return cmd === 'uptime' && output.includes('up');
+        return effCmd === 'uptime' && output.includes('up');
 
       // ==========================================
       // 4. AVANÇADO (26 lições)
       // ==========================================
       case 'text-tree-view':
-        return cmd === 'tree' && output.includes('directories');
+        return effCmd === 'tree' && output.includes('directories');
 
       case 'process-ps':
-        return cmd === 'ps' && output.includes('PID');
+        return effCmd === 'ps' && output.includes('PID');
 
       case 'process-top':
-        return cmd === 'top' && output.includes('PID');
+        return effCmd === 'top' && output.includes('PID');
 
       case 'process-df':
-        return cmd === 'df' && output.includes('%');
+        return effCmd === 'df' && output.includes('%');
 
       case 'process-du':
-        return cmd === 'du' && output.length > 0;
+        return effCmd === 'du' && output.length > 0;
 
       case 'process-du-summary':
-        return cmd === 'du' && args.some(a => a.startsWith('-') && a.includes('s')) && args.some(a => a.startsWith('-') && a.includes('h')) && raw.includes('documents');
+        return effCmd === 'du' && LessonChecker.hasShortFlag(effArgs, 's') && LessonChecker.hasShortFlag(effArgs, 'h') && raw.includes('documents');
 
       case 'text-tee-pipe': {
         const relatorio = fs.getNode('/home/user/relatorio.txt') || fs.getNode(fs.resolvePath('relatorio.txt'));
-        const hasPipeTee = raw.includes('|') && raw.includes('tee');
-        return hasPipeTee &&
-               raw.includes('ls') &&
+        return hasCall(pipelineCalls, 'ls') &&
+               hasCall(pipelineCalls, 'tee') &&
                relatorio !== null &&
                relatorio.content &&
                relatorio.content.trim().length > 0 &&
-               output.trim().length > 0;
+               output.trim() === relatorio.content.trim();
       }
 
-      case 'text-tree-depth':
-        return cmd === 'tree' && (args.includes('-L') || raw.includes('-L')) && output.includes('directories');
+      case 'text-tree-depth': {
+        const idxL = effArgs.indexOf('-L');
+        const hasL2 = (idxL !== -1 && effArgs[idxL + 1] === '2') || effArgs.includes('-L2');
+        return effCmd === 'tree' && hasL2 && output.includes('directories');
+      }
 
       case 'text-column-format':
-        return cmd === 'column' && output.includes('servidor1');
+        return effCmd === 'column' && output.includes('servidor1');
 
       case 'tool-jq-parse':
-        return raw.includes('jq') && output.includes('"version": "2.0.0"');
+        return hasCall(allCalls, 'jq') && output.includes('"version": "2.0.0"');
 
       case 'text-jq-filter':
-        return raw.includes('jq') && raw.includes('.version') && output.includes('2.0.0');
+        return hasCall(allCalls, 'jq') && raw.includes('.version') && output.includes('2.0.0');
 
       case 'process-kill':
-        return cmd === 'kill' && args.includes('123');
+        return effCmd === 'kill' && effArgs.includes('123');
 
       case 'process-kill-sigkill':
-        return cmd === 'kill' && (args.includes('-9') || args.includes('-KILL') || args.includes('-SIGKILL')) && args.includes('123');
+        return effCmd === 'kill' &&
+               (effArgs.includes('-9') || effArgs.includes('-KILL') || effArgs.includes('-SIGKILL') ||
+                (effArgs.includes('-s') && /^(SIG)?KILL|9$/i.test(effArgs[effArgs.indexOf('-s') + 1] || ''))) &&
+               effArgs.includes('123');
 
       case 'process-pgrep':
-        return cmd === 'pgrep' && raw.includes('nginx') && output.includes('123');
+        return effCmd === 'pgrep' && raw.includes('nginx') && output.includes('123');
 
       case 'process-pkill':
-        return cmd === 'pkill' && raw.includes('nginx') &&
+        return effCmd === 'pkill' && raw.includes('nginx') &&
                (commandEngine ? commandEngine.killedProcesses.has('123') : true);
 
       case 'process-jobs-bg':
-        return cmd === 'jobs' && allSessionText.includes('sleep') && allSessionText.includes('&') && output.includes('sleep');
+        return effCmd === 'jobs' && allSessionText.includes('sleep') && allSessionText.includes('&') && output.includes('sleep');
 
       case 'pipeline-ls-grep':
-        return raw.includes('ls') && raw.includes('|') && raw.includes('grep') && output.includes('readme.txt');
+        return hasCall(pipelineCalls, 'ls') && hasCall(pipelineCalls, 'grep') && output.includes('readme.txt');
 
       case 'redirect-output-basic': {
         const logNode = fs.getNode('/home/user/study_log.txt') || fs.getNode(fs.resolvePath('study_log.txt'));
@@ -437,260 +616,277 @@ class LessonChecker {
 
       case 'redirect-append-advanced': {
         const logNode = fs.getNode('/home/user/study_log.txt') || fs.getNode(fs.resolvePath('study_log.txt'));
-        return raw.includes('>>') && !!logNode && logNode.content.includes('Linux Study Log') && logNode.content.split('\n').filter(Boolean).length >= 2;
+        return raw.includes('>>') && !!logNode && logNode.content.includes('Linux Study Log') &&
+               logNode.content.split('\n').filter(Boolean).length >= 2 &&
+               (hasCall(allCalls, 'date') || /\b202\d\b|UTC/.test(logNode.content));
       }
 
       case 'text-sed-replace':
-        return cmd === 'sed' && raw.includes('Linux') && output.includes('GNU/Linux');
+        return effCmd === 'sed' && raw.includes('Linux') && output.includes('GNU/Linux');
 
       case 'text-sed-inplace':
-        return cmd === 'sed' && (args.includes('-i') || raw.includes('-i')) && fs.readFile('/home/user/config.txt').includes('versao=2');
+        return effCmd === 'sed' && LessonChecker.hasShortFlag(effArgs, 'i') && fs.readFile('/home/user/config.txt').includes('versao=2');
 
       case 'text-sed-delete':
-        return cmd === 'sed' && raw.includes('/inativo/d') && output.includes('servidor1') && !output.includes('inativo');
+        return effCmd === 'sed' && raw.includes('/inativo/d') && output.includes('servidor1') && !output.includes('inativo');
 
       case 'text-awk-columns':
-        return cmd === 'awk' && raw.includes('$1') && raw.includes('$3') && output.includes('servidor1') && output.includes('ativo');
+        return effCmd === 'awk' && raw.includes('$1') && raw.includes('$3') && output.includes('servidor1') && output.includes('ativo');
 
       case 'text-awk-delimiter':
-        return cmd === 'awk' && (raw.includes('-F') || raw.includes('-F,')) && output.includes('aluno') && output.includes('admin');
+        return effCmd === 'awk' && (raw.includes('-F') || raw.includes('-F,')) && output.includes('aluno') && output.includes('admin');
 
       case 'text-awk-filter':
-        return cmd === 'awk' && raw.includes('ativo') && output.includes('servidor1') && output.includes('servidor3') && !output.includes('servidor2');
+        return effCmd === 'awk' && raw.includes('ativo') && output.includes('servidor1') && output.includes('servidor3') && !output.includes('servidor2');
 
       case 'text-xargs-basic':
-        return raw.includes('xargs') && raw.includes('touch') && (fs.getNode('/home/user/arq1.txt') !== null && fs.getNode('/home/user/arq2.txt') !== null);
+        return hasCall(allCalls, 'xargs') && raw.includes('touch') && (fs.getNode('/home/user/arq1.txt') !== null && fs.getNode('/home/user/arq2.txt') !== null);
 
       // ==========================================
       // 5. LPIC-1 (28 lições)
       // ==========================================
       case 'lpic-tar-list':
-        return raw.includes('tar') && (args.some(a => a.includes('t')) || raw.includes('tf') || raw.includes('-t')) && output.includes('documents');
+        return effCmd === 'tar' && (effArgs.some(a => a.includes('t')) || raw.includes('-t')) && output.includes('documents');
 
       case 'lpic-gzip-compress': {
         const gzNode = fs.getNode('/home/user/documents/notes.txt.gz') || fs.getNode(fs.resolvePath('documents/notes.txt.gz')) || fs.getNode(fs.resolvePath('notes.txt.gz'));
-        return cmd === 'gzip' && !args.includes('-d') && gzNode !== null;
+        return effCmd === 'gzip' && !effArgs.includes('-d') && gzNode !== null;
       }
 
       case 'lpic-gunzip-decompress':
         return allSessionText.includes('gzip') &&
-               (raw.includes('gunzip') || (raw.includes('gzip') && raw.includes('-d'))) &&
+               (effCmd === 'gunzip' || (effCmd === 'gzip' && effArgs.includes('-d'))) &&
                fs.getNode('/home/user/documents/notes.txt') !== null &&
                fs.getNode('/home/user/documents/notes.txt.gz') === null;
 
       case 'text-file-type':
-        return cmd === 'file' && raw.includes('readme.txt') && output.includes('text');
+        return effCmd === 'file' && raw.includes('readme.txt') && output.includes('text');
 
       case 'text-tac-reverse':
-        return cmd === 'tac' && raw.includes('readme.txt') && output.length > 0;
+        return effCmd === 'tac' && raw.includes('readme.txt') && output.length > 0;
 
       case 'text-rev-chars':
-        return cmd === 'rev' && raw.includes('readme.txt') && output.length > 0;
+        return effCmd === 'rev' && raw.includes('readme.txt') && output.length > 0;
 
       case 'text-nl-lines':
-        return cmd === 'nl' && raw.includes('readme.txt') && output.includes('1\t');
+        return effCmd === 'nl' && raw.includes('readme.txt') && output.includes('1\t');
 
       case 'text-base64-encode':
-        return raw.includes('base64') && !raw.includes('-d') && (output.trim() === 'TGludXg=' || output.trim() === 'TGludXgK');
+        return hasCall(allCalls, 'base64') && !effArgs.includes('-d') && (output.trim() === 'TGludXg=' || output.trim() === 'TGludXgK');
 
       case 'text-base64-decode':
-        return raw.includes('base64') && (args.includes('-d') || raw.includes('-d')) && output.includes('Linux');
+        return hasCall(allCalls, 'base64') && effArgs.includes('-d') && output.includes('Linux');
 
       case 'lpic-ln-symbolic': {
         const sym = fs.getRawNode('/home/user/readme-link');
-        return cmd === 'ln' && args.some(a => a === '-s' || a === '--symbolic') &&
+        return effCmd === 'ln' && effArgs.some(a => a === '-s' || a === '--symbolic') &&
                !!sym && sym.type === 'symlink' && sym.target.includes('readme.txt');
       }
 
       case 'lpic-ln-hardlink': {
         const hard = fs.getNode('/home/user/notes-hard.txt');
-        return cmd === 'ln' && !args.some(a => a === '-s' || a === '--symbolic') &&
+        return effCmd === 'ln' && !effArgs.some(a => a === '-s' || a === '--symbolic') &&
                !!hard && !!hard.hardlinkOf && hard.links >= 2;
       }
 
       case 'lpic-readlink':
-        return cmd === 'readlink' && raw.includes('readme-link') && output.includes('readme.txt');
+        return effCmd === 'readlink' && raw.includes('readme-link') && output.includes('readme.txt');
 
       case 'lpic-tar-create': {
         const tarNode = fs.getNode('/home/user/docs.tar') || fs.getNode(fs.resolvePath('docs.tar'));
-        return cmd === 'tar' && args.some(a => a.includes('c')) && tarNode !== null;
+        return effCmd === 'tar' && effArgs.some(a => a.includes('c')) && tarNode !== null;
       }
 
       case 'lpic-tar-extract':
         return allSessionText.includes('tar') &&
                raw.includes('proj.tar') &&
-               args.some(a => a.includes('x')) &&
+               effArgs.some(a => a.includes('x')) &&
                fs.getNode('/home/user/proj.tar') !== null &&
                fs.getNode('/home/user/projects/test.sh') !== null;
 
       case 'lpic-tar-gzip-create':
-        return cmd === 'tar' && args.some(a => a.includes('c') && a.includes('z')) && fs.getNode('/home/user/docs.tar.gz') !== null;
+        return effCmd === 'tar' && effArgs.some(a => a.includes('c')) && (effArgs.some(a => a.includes('z')) || raw.includes('-z')) && fs.getNode('/home/user/docs.tar.gz') !== null;
 
       case 'lpic-tar-extract-dir':
-        return cmd === 'tar' && args.some(a => a.includes('x')) && raw.includes('-C') &&
+        return effCmd === 'tar' && effArgs.some(a => a.includes('x')) && (effArgs.includes('-C') || effArgs.includes('--directory')) &&
                fs.getNode('/home/user/downloads/documents/readme.txt') !== null;
 
       case 'lpic-zcat-log':
-        return cmd === 'zcat' && raw.includes('access.log.1.gz') && output.includes('GET /');
+        return effCmd === 'zcat' && raw.includes('access.log.1.gz') && output.includes('GET /');
 
       case 'lpic-zip-create':
-        return cmd === 'zip' && fs.getNode('/home/user/proj.zip') !== null;
+        return effCmd === 'zip' && fs.getNode('/home/user/proj.zip') !== null;
 
       case 'lpic-unzip-extract':
-        return cmd === 'unzip' && raw.includes('-d') && fs.getNode('/home/user/downloads/projects/test.sh') !== null;
+        return effCmd === 'unzip' && effArgs.includes('-d') && fs.getNode('/home/user/downloads/projects/test.sh') !== null;
 
       case 'lpic-find-exec-cat':
-        return raw.includes('find') && raw.includes('-exec') && raw.includes('cat') && output.length > 0;
+        return effCmd === 'find' && effArgs.includes('-exec') && effArgs.includes('cat') && output.length > 0;
 
       case 'lpic-grep-recursive':
-        return raw.includes('grep') && args.some(a => a === '--recursive' || (a.startsWith('-') && (a.includes('r') || a.includes('R')))) && output.includes('Linux');
+        return hasCall(allCalls, 'grep') &&
+               allCalls.some(c => c.effCmd === 'grep' && (LessonChecker.hasShortFlag(c.effArgs, 'r', '--recursive') || LessonChecker.hasShortFlag(c.effArgs, 'R'))) &&
+               output.includes('Linux');
 
       case 'lpic-ls-long-detail':
-        return cmd === 'ls' && args.some(a => a === '--long' || (a.startsWith('-') && a.includes('l')));
+        return effCmd === 'ls' && LessonChecker.hasShortFlag(effArgs, 'l', '--long');
+
+      case 'lpic-umask':
+        return effCmd === 'umask' && (commandEngine ? commandEngine.fs.umask === '0027' : true);
 
       case 'text-stat-info':
-        return cmd === 'stat' && output.includes('Inode:') && output.includes('readme.txt');
+        return effCmd === 'stat' && output.includes('Inode:') && output.includes('readme.txt');
 
       case 'text-sha256sum':
-        return cmd === 'sha256sum' && raw.includes('readme.txt') && output.length >= 64;
+        return effCmd === 'sha256sum' && raw.includes('readme.txt') && output.length >= 64;
 
       case 'lpic-md5sum':
-        return cmd === 'md5sum' && raw.includes('readme.txt') && output.length >= 32;
+        return effCmd === 'md5sum' && raw.includes('readme.txt') && output.length >= 32;
 
       case 'lpic-find-exec-grep':
-        return raw.includes('find') && raw.includes('-exec') && raw.includes('grep') && output.length > 0;
+        return effCmd === 'find' && effArgs.includes('-exec') && effArgs.includes('grep') && output.length > 0;
 
       case 'lpic-find-type-depth':
-        return cmd === 'find' && raw.includes('-maxdepth') && raw.includes('-type') && raw.includes('f') && output.length > 0;
+        return effCmd === 'find' && effArgs.includes('-maxdepth') && effArgs.includes('-type') && effArgs.includes('f') && output.length > 0;
 
       case 'lpic-find-tar-combo':
-        return raw.includes('tar') && raw.includes('proj-backup.tar') && fs.getNode('/home/user/proj-backup.tar') !== null;
+        return (hasCall(allCalls, 'find') || /\bfind\b/.test(allSessionText)) &&
+               hasCall(allCalls, 'tar') &&
+               raw.includes('proj-backup.tar') &&
+               fs.getNode('/home/user/proj-backup.tar') !== null;
 
       // ==========================================
-      // 6. GIT (16 lições)
+      // 6. GIT (16+ lições)
       // ==========================================
       case 'git-init':
-        return cmd === 'git' && args[0] === 'init' && git.initialized === true;
+        return effCmd === 'git' && effArgs[0] === 'init' && git.initialized === true;
 
       case 'git-status-untracked':
-        return cmd === 'git' && args[0] === 'status' && output.includes('README.md');
+        return effCmd === 'git' && effArgs[0] === 'status' && output.includes('README.md');
 
       case 'git-add':
-        return cmd === 'git' && args[0] === 'add' && (git.index.has('README.md') || git.index.size > 0);
+        return effCmd === 'git' && effArgs[0] === 'add' && (git.index.has('README.md') || git.index.size > 0);
 
       case 'git-commit':
-        return cmd === 'git' && args[0] === 'commit' && git.commits.length >= 1;
+        return effCmd === 'git' && effArgs[0] === 'commit' && git.commits.length >= 1;
 
       case 'git-log':
-        return cmd === 'git' && args[0] === 'log' && output.includes('commit');
+        return effCmd === 'git' && effArgs[0] === 'log' && output.includes('commit');
 
       case 'git-add-all':
-        return cmd === 'git' && args[0] === 'add' && (args.includes('.') || args.includes('-A') || args.includes('--all')) &&
+        return effCmd === 'git' && effArgs[0] === 'add' && (effArgs.includes('.') || effArgs.includes('-A') || effArgs.includes('--all')) &&
                git.index.has('index.html') && git.index.has('style.css');
 
       case 'git-commit-second':
-        return git.commits.length >= 2;
+        return effCmd === 'git' && effArgs[0] === 'commit' && git.commits.length >= 2;
 
       case 'git-branch-create':
-        return cmd === 'git' && args[0] === 'branch' && git.branches.includes('feature');
+        return effCmd === 'git' && effArgs[0] === 'branch' && git.branches.includes('feature');
 
       case 'git-branch-list':
-        return cmd === 'git' && args[0] === 'branch' && args.length === 1 && output.includes('feature');
+        return effCmd === 'git' && effArgs[0] === 'branch' && effArgs.slice(1).every(a => a.startsWith('-')) && output.includes('feature');
 
       case 'git-switch':
-        return cmd === 'git' && (args[0] === 'switch' || args[0] === 'checkout') && git.currentBranch === 'feature';
+        return effCmd === 'git' && (effArgs[0] === 'switch' || effArgs[0] === 'checkout') && git.currentBranch === 'feature';
 
       case 'git-diff-staged':
-        return cmd === 'git' && args[0] === 'diff' && (args.includes('--staged') || args.includes('--cached')) && output.includes('diff --git');
+        return effCmd === 'git' && effArgs[0] === 'diff' && (effArgs.includes('--staged') || effArgs.includes('--cached')) && output.includes('diff --git');
 
       case 'git-restore-staged':
-        return cmd === 'git' && (args[0] === 'restore' || args[0] === 'reset') && !git.index.has('.env') && git.index.has('index.html');
+        return effCmd === 'git' && (effArgs[0] === 'restore' || effArgs[0] === 'reset') && !git.index.has('.env') && git.index.has('index.html');
 
       case 'git-switch-create':
-        return cmd === 'git' && ((args[0] === 'switch' && args.includes('-c')) || (args[0] === 'checkout' && args.includes('-b'))) && git.currentBranch === 'hotfix';
+        return effCmd === 'git' && ((effArgs[0] === 'switch' && effArgs.includes('-c')) || (effArgs[0] === 'checkout' && effArgs.includes('-b'))) && git.currentBranch === 'hotfix';
 
       case 'git-merge':
-        return cmd === 'git' && args[0] === 'merge' && args.includes('feature') && git.commits.some(c => c.message.includes('Merge branch'));
+        return effCmd === 'git' && effArgs[0] === 'merge' && effArgs.includes('feature') && git.commits.some(c => c.message.includes('Merge branch'));
 
       case 'git-branch-delete':
-        return cmd === 'git' && args[0] === 'branch' && (args.includes('-d') || args.includes('-D')) && !git.branches.includes('feature');
+        return effCmd === 'git' && effArgs[0] === 'branch' && (effArgs.includes('-d') || effArgs.includes('-D')) && !git.branches.includes('feature');
 
       case 'git-stash':
-        return allSessionText.includes('git stash') && cmd === 'git' && args[0] === 'stash' && (args[1] === 'pop' || args[1] === 'apply') && git.stashes.length === 0;
+        return allSessionText.includes('git stash') && effCmd === 'git' && effArgs[0] === 'stash' &&
+               ((effArgs[1] === 'pop' && git.stashes.length === 0) || (effArgs[1] === 'apply' && git.index.has('index.html')));
+
+      case 'git-gitignore': {
+        const gi = fs.getNode('/home/user/.gitignore');
+        return !!gi && (gi.content || '').includes('.env') &&
+               effCmd === 'git' && effArgs[0] === 'status' && !output.includes('.env');
+      }
 
       // ==========================================
       // 7. DOCKER (15 lições)
       // ==========================================
       case 'docker-pull':
-        return cmd === 'docker' && args[0] === 'pull' && docker.images.has('hello-world');
+        return effCmd === 'docker' && effArgs[0] === 'pull' && docker.images.has('hello-world');
 
       case 'docker-images':
-        return cmd === 'docker' && args[0] === 'images' && output.includes('hello-world');
+        return effCmd === 'docker' && effArgs[0] === 'images' && output.includes('hello-world');
 
       case 'docker-run-hello':
-        return cmd === 'docker' && args[0] === 'run' && Array.from(docker.containers.values()).some(c => c.image === 'hello-world');
+        return effCmd === 'docker' && effArgs[0] === 'run' && Array.from(docker.containers.values()).some(c => c.image === 'hello-world');
 
       case 'docker-ps-a':
-        return cmd === 'docker' && args[0] === 'ps' && (args.includes('-a') || args.includes('--all'));
+        return effCmd === 'docker' && effArgs[0] === 'ps' && (effArgs.includes('-a') || effArgs.includes('--all'));
 
       case 'docker-run-detached':
-        return cmd === 'docker' && args[0] === 'run' && Array.from(docker.containers.values()).some(c => c.status.startsWith('Up'));
+        return effCmd === 'docker' && effArgs[0] === 'run' && Array.from(docker.containers.values()).some(c => c.status.startsWith('Up'));
 
       case 'docker-ps':
-        return cmd === 'docker' && args[0] === 'ps' && !args.includes('-a') && !args.includes('--all');
+        return effCmd === 'docker' && effArgs[0] === 'ps' && !effArgs.includes('-a') && !effArgs.includes('--all');
 
       case 'docker-stop':
-        return cmd === 'docker' && args[0] === 'stop' && Array.from(docker.containers.values()).some(c => c.status.includes('Exited'));
+        return effCmd === 'docker' && effArgs[0] === 'stop' && Array.from(docker.containers.values()).some(c => c.status.includes('Exited'));
 
       case 'docker-start':
-        return cmd === 'docker' && args[0] === 'start' && Array.from(docker.containers.values()).some(c => c.name === 'web' && c.status.startsWith('Up'));
+        return effCmd === 'docker' && effArgs[0] === 'start' && Array.from(docker.containers.values()).some(c => c.name === 'web' && c.status.startsWith('Up'));
 
       case 'docker-rm':
-        return cmd === 'docker' && args[0] === 'rm' && !Array.from(docker.containers.values()).some(c => c.name === 'web');
+        return effCmd === 'docker' && effArgs[0] === 'rm' && !Array.from(docker.containers.values()).some(c => c.name === 'web');
 
       case 'docker-rmi':
-        return cmd === 'docker' && args[0] === 'rmi' && !docker.images.has('hello-world');
+        return effCmd === 'docker' && effArgs[0] === 'rmi' && !docker.images.has('hello-world');
 
       case 'docker-run-port':
-        return cmd === 'docker' && args[0] === 'run' && Array.from(docker.containers.values()).some(c => c.ports && c.ports.includes('8080'));
+        return effCmd === 'docker' && effArgs[0] === 'run' && Array.from(docker.containers.values()).some(c => c.ports && c.ports.includes('8080'));
 
       case 'docker-logs':
-        return cmd === 'docker' && args[0] === 'logs' && raw.includes('web2') && output.includes('nginx');
+        return effCmd === 'docker' && effArgs[0] === 'logs' && raw.includes('web2') && output.includes('nginx');
 
       case 'docker-exec':
-        return cmd === 'docker' && args[0] === 'exec' && raw.includes('web2') && raw.includes('uname') && output.includes('Linux');
+        return effCmd === 'docker' && effArgs[0] === 'exec' && raw.includes('web2') && raw.includes('uname') && output.includes('Linux');
 
       case 'docker-inspect':
-        return cmd === 'docker' && args[0] === 'inspect' && raw.includes('web2') && output.includes('"Id"');
+        return effCmd === 'docker' && effArgs[0] === 'inspect' && raw.includes('web2') && output.includes('"Id"');
 
       case 'docker-build':
-        return cmd === 'docker' && args[0] === 'build' && docker.images.has('penguin-api') && output.includes('Successfully tagged');
+        return effCmd === 'docker' && effArgs[0] === 'build' && docker.images.has('penguin-api') && output.includes('Successfully tagged');
 
       // ==========================================
-      // 8. SCRIPTING & SHELL POWER (23 lições)
+      // 8. SCRIPTING & SHELL POWER (23+ lições)
       // ==========================================
       case 'bash-arithmetic':
-        return raw.includes('$((') && output.trim() === '40';
+        return (raw.includes('$((') || hasCall(allCalls, 'expr') || hasCall(allCalls, 'bc')) && output.trim() === '40';
 
       case 'bash-exit-code':
-        return cmd === 'echo' && raw.includes('$?') && (output.trim() === '0' || output.trim() === '1');
+        return effCmd === 'echo' && raw.includes('$?') && /^\d+$/.test(output.trim());
 
       case 'bash-alias-create':
         return raw.includes('alias') && raw.includes('c=') && raw.includes('clear') &&
                (commandEngine ? commandEngine.aliases['c'] === 'clear' : true);
 
       case 'bash-alias-list':
-        return cmd === 'alias' && args.length === 0 && output.includes('alias');
+        return effCmd === 'alias' && effArgs.length === 0 && output.includes('alias');
 
       case 'bash-alias-remove':
-        return cmd === 'unalias' && args.includes('c') &&
+        return effCmd === 'unalias' && effArgs.includes('c') &&
                (commandEngine ? !Object.prototype.hasOwnProperty.call(commandEngine.aliases, 'c') : true);
 
       case 'bash-history-exec':
         return (raw === '!!' || raw.startsWith('!!') || allSessionText.includes('!!') || (ctx && ctx.res && (ctx.res.rawCommand === '!!' || ctx.res.wasHistoryExpansion))) && output.length > 0;
 
       case 'bash-history-list':
-        return cmd === 'history' && !args.includes('-c');
+        return effCmd === 'history' && !effArgs.includes('-c');
 
       case 'bash-redirect-stderr': {
         const hasErrFile = fs.getNode('/home/user/erros.txt') !== null ||
@@ -710,10 +906,7 @@ class LessonChecker {
         return raw.includes('2>') && raw.includes('/dev/null') && output.trim() === '';
 
       case 'bash-here-string':
-        return raw.includes('<<<') && (
-          output.toLowerCase().includes('penguin gym') ||
-          raw.toLowerCase().includes('penguin gym')
-        );
+        return effCmd === 'cat' && raw.includes('<<<') && output.toLowerCase().includes('penguin gym');
 
       case 'bash-subshell': {
         const hasParens = (raw.startsWith('(') && raw.endsWith(')')) ||
@@ -725,17 +918,17 @@ class LessonChecker {
       }
 
       case 'bash-dir-stack':
-        return raw.includes('pushd') && raw.includes('/etc') && fs.currentPath === '/etc';
+        return effCmd === 'pushd' && raw.includes('/etc') && fs.currentPath === '/etc';
 
       case 'bash-popd':
-        return allSessionText.includes('pushd') && raw.includes('popd') && fs.currentPath === '/home/user';
+        return allSessionText.includes('pushd') && effCmd === 'popd' && fs.currentPath === '/home/user';
 
       case 'bash-export-env':
-        return cmd === 'export' && raw.includes('GYM_ENV=production') &&
+        return (effCmd === 'export' || hasCall(allCalls, 'export')) && raw.includes('GYM_ENV') &&
                (commandEngine ? commandEngine.envVars.GYM_ENV === 'production' : true);
 
       case 'bash-source-bashrc':
-        return (cmd === 'source' || cmd === '.') && raw.includes('.bashrc');
+        return (effCmd === 'source' || effCmd === '.') && raw.includes('.bashrc');
 
       case 'bash-run-script':
         return (raw.includes('bash') || raw.includes('./')) && raw.includes('script.sh') && output.length > 0;
@@ -764,154 +957,170 @@ class LessonChecker {
         return raw.includes('if') && raw.includes('-f') && output.includes('Existe');
 
       // ==========================================
-      // 9. REDES & CONECTIVIDADE (26 lições)
+      // 9. REDES & CONECTIVIDADE (26+ lições)
       // ==========================================
       case 'net-ip-addr':
-        return cmd === 'ip' && (args[0] === 'addr' || args[0] === 'a' || args.includes('addr') || args.includes('a')) && output.includes('inet ');
+        return effCmd === 'ip' && effArgs.some(a => /^(a|addr|address)$/i.test(a)) && output.includes('inet ');
 
       case 'net-ip-route':
-        return cmd === 'ip' && (args[0] === 'route' || args[0] === 'r') && output.includes('default via');
+        return effCmd === 'ip' && effArgs.some(a => /^(r|route)$/i.test(a)) && output.includes('default via');
 
       case 'net-ping':
-        return cmd === 'ping' && args.includes('-c') && output.includes('estatísticas de ping');
+        return effCmd === 'ping' && effArgs.some(a => a === '-c' || /^-c\d+$/.test(a)) && output.includes('estatísticas de ping');
 
       case 'net-traceroute':
-        return cmd === 'traceroute' && raw.includes('penguin-gym.com') && output.includes('traceroute to');
+        return effCmd === 'traceroute' && raw.includes('penguin-gym.com') && output.includes('traceroute to');
 
       case 'net-curl-get':
-        return cmd === 'curl' && (raw.includes('localhost') || raw.includes('127.0.0.1')) && !args.includes('-I') && !args.includes('--head') && output.includes('<!DOCTYPE html>');
+        return effCmd === 'curl' && (raw.includes('localhost') || raw.includes('127.0.0.1')) &&
+               !effArgs.some(a => a === '--head' || (a.startsWith('-') && !a.startsWith('--') && a.includes('I'))) &&
+               output.includes('<!DOCTYPE html>');
 
       case 'net-curl-head':
-        return cmd === 'curl' && (args.includes('-I') || args.includes('--head')) && output.includes('HTTP/1.1 200 OK');
+        return effCmd === 'curl' && effArgs.some(a => a === '--head' || (a.startsWith('-') && !a.startsWith('--') && a.includes('I'))) && output.includes('HTTP/1.1 200 OK');
 
       case 'net-curl-download': {
         const hasOut = fs.getNode('/home/user/saida.json') || fs.getNode(fs.resolvePath('saida.json')) ||
                        fs.getNode('/home/user/app.json') || fs.getNode(fs.resolvePath('app.json'));
-        return cmd === 'curl' && (args.includes('-o') || args.includes('-O')) && hasOut !== null;
+        return effCmd === 'curl' &&
+               effArgs.some(a => a === '--output' || a === '--remote-name' || a.startsWith('-o') || (a.startsWith('-') && !a.startsWith('--') && a.includes('O'))) &&
+               hasOut !== null;
       }
 
       case 'net-curl-post':
-        return cmd === 'curl' && raw.includes('-X') && raw.includes('POST') && raw.includes('-d') && output.includes('"status": "created"');
+        return effCmd === 'curl' && (raw.includes('-d') || raw.includes('--data')) && output.includes('"status": "created"') && output.includes('Tux');
+
+      case 'net-curl-jq':
+        return hasCall(pipelineCalls, 'curl') && hasCall(pipelineCalls, 'jq') && output.includes('penguin-gym-api');
 
       case 'net-wget': {
         const dadosNode = fs.getNode('/home/user/dados.txt') || fs.getNode(fs.resolvePath('dados.txt'));
-        return cmd === 'wget' && dadosNode !== null;
+        return effCmd === 'wget' && dadosNode !== null;
       }
 
       case 'net-dig':
-        return cmd === 'dig' && raw.includes('penguin-gym.com') && !raw.includes('+short') && output.includes('ANSWER SECTION');
+        return effCmd === 'dig' && raw.includes('penguin-gym.com') && !raw.includes('+short') && output.includes('ANSWER SECTION');
 
       case 'net-dig-short':
-        return cmd === 'dig' && raw.includes('+short') && raw.includes('penguin-gym.com') && output.includes('93.184.216.34');
+        return effCmd === 'dig' && raw.includes('+short') && raw.includes('penguin-gym.com') && output.includes('93.184.216.34');
 
       case 'net-nslookup':
-        return cmd === 'nslookup' && raw.includes('penguin-gym.com') && output.includes('Address: 93.184.216.34');
+        return effCmd === 'nslookup' && raw.includes('penguin-gym.com') && output.includes('Address: 93.184.216.34');
 
       case 'net-host':
-        return cmd === 'host' && raw.includes('penguin-gym.com') && output.includes('mail is handled by');
+        return effCmd === 'host' && raw.includes('penguin-gym.com') && output.includes('mail is handled by');
 
       case 'net-ss-listen':
-        return cmd === 'ss' && output.includes('LISTEN');
+        return effCmd === 'ss' && output.includes('LISTEN');
 
       case 'net-netstat':
-        return cmd === 'netstat' && output.includes('OUÇA');
+        return effCmd === 'netstat' && output.includes('OUÇA');
 
       case 'net-nc-port':
-        return (cmd === 'nc' || cmd === 'netcat') && raw.includes('80') && output.includes('succeeded');
+        return (effCmd === 'nc' || effCmd === 'netcat') && raw.includes('80') && output.includes('succeeded');
 
       case 'net-nmap-scan':
-        return cmd === 'nmap' && raw.includes('localhost') && output.includes('80/tcp');
+        return effCmd === 'nmap' && raw.includes('localhost') && output.includes('80/tcp');
 
       case 'net-scp-copy':
-        return cmd === 'scp' && raw.includes('readme.txt') && raw.includes('192.168.1.50') && output.includes('100%');
+        return effCmd === 'scp' && raw.includes('readme.txt') && raw.includes('192.168.1.50') && output.includes('100%');
 
       case 'net-rsync-sync':
-        return cmd === 'rsync' && raw.includes('projects') && raw.includes('192.168.1.50') && output.includes('100%');
+        return effCmd === 'rsync' && raw.includes('projects') && raw.includes('192.168.1.50') && output.includes('100%');
 
       case 'net-etc-hosts':
-        return (cmd === 'cat' || cmd === 'less' || cmd === 'head') && raw.includes('/etc/hosts') && output.includes('penguin-gym');
+        return (effCmd === 'cat' || effCmd === 'less' || effCmd === 'head') && raw.includes('/etc/hosts') && output.includes('penguin-gym');
 
       case 'net-ufw-status':
-        return raw.includes('ufw') && raw.includes('status') && output.includes('Status:');
+        return effCmd === 'ufw' && effArgs.includes('status') && output.includes('Status:');
 
       case 'net-ufw-enable':
-        return raw.includes('ufw') && raw.includes('enable') && output.includes('active and enabled');
+        return effCmd === 'ufw' && effArgs.includes('enable') && output.includes('active and enabled');
 
       case 'net-ufw-allow':
-        return raw.includes('ufw') && raw.includes('allow') && raw.includes('80') && output.includes('Rule added');
+        return effCmd === 'ufw' && effArgs.includes('allow') && (raw.includes('80') || /\bhttp\b/i.test(raw)) && output.includes('Rule added');
 
       case 'net-ufw-deny':
-        return raw.includes('ufw') && raw.includes('deny') && raw.includes('23') && output.includes('Rule added');
+        return effCmd === 'ufw' && effArgs.includes('deny') && (raw.includes('23') || /\btelnet\b/i.test(raw)) && output.includes('Rule added');
 
       case 'net-ufw-delete':
-        return raw.includes('ufw') && raw.includes('delete') && raw.includes('80') && output.includes('Rule deleted');
+        return effCmd === 'ufw' && effArgs.includes('delete') && output.includes('Rule deleted') &&
+               (raw.includes('80') || /\bhttp\b/i.test(raw) || (commandEngine && !commandEngine.ufwState.rules.some(r => r.startsWith('80/'))));
 
       case 'net-ufw-disable':
-        return raw.includes('ufw') && raw.includes('disable') && output.includes('disabled on system startup');
+        return effCmd === 'ufw' && effArgs.includes('disable') && output.includes('disabled on system startup');
 
       // ==========================================
-      // 10. DATABASE / SQL (17 lições)
+      // 10. DATABASE / SQL (17+ lições)
       // ==========================================
       case 'db-tables':
-        return raw.includes('sqlite3') && raw.includes('.tables') && output.includes('members');
+        return hasCall(allCalls, 'sqlite3') && raw.includes('.tables') && output.includes('members');
 
       case 'db-schema':
-        return raw.includes('sqlite3') && raw.includes('.schema') && output.includes('CREATE TABLE members');
+        return hasCall(allCalls, 'sqlite3') && raw.includes('.schema') && output.includes('CREATE TABLE members');
 
       case 'db-count':
-        return raw.includes('sqlite3') && /count\(\s*\*\s*\)/i.test(raw) && output.trim() === '12';
+        return hasCall(allCalls, 'sqlite3') && /count\(\s*(\*|id|1)\s*\)/i.test(raw) && output.trim() === '12';
 
       case 'db-select-where':
-        return raw.includes('sqlite3') && /where/i.test(raw) && /tokyo/i.test(raw) && output.includes('Pip');
+        return hasCall(allCalls, 'sqlite3') && /where/i.test(raw) && /tokyo/i.test(raw) && output.includes('Pip');
 
       case 'db-order-limit':
-        return raw.includes('sqlite3') && /order\s+by/i.test(raw) && /limit\s+3/i.test(raw) && output.includes('Nico|45');
+        return hasCall(allCalls, 'sqlite3') && /order\s+by\s+age\s+desc/i.test(raw) && /limit\s+3/i.test(raw) &&
+               output.includes('Nico|45') && output.includes('Tama|38') && output.includes('Ken|33');
 
       case 'db-group-count':
-        return raw.includes('sqlite3') && /group\s+by/i.test(raw) && /count/i.test(raw) && output.includes('Tokyo|4');
+        return hasCall(allCalls, 'sqlite3') && /group\s+by/i.test(raw) && /count/i.test(raw) && output.includes('Tokyo|4');
+
+      case 'db-having':
+        return hasCall(allCalls, 'sqlite3') && /group\s+by/i.test(raw) && /having/i.test(raw) && output.includes('Tokyo|4') && !output.includes('Porto');
 
       case 'db-pipe':
-        return raw.includes('sqlite3') && raw.includes('|') && raw.includes('sort') && raw.includes('uniq') && output.includes('Tokyo');
+        return hasCall(allCalls, 'sqlite3') && hasCall(pipelineCalls, 'sort') && hasCall(pipelineCalls, 'uniq') && output.includes('Tokyo');
 
       case 'db-null':
-        return raw.includes('sqlite3') && /is\s+null/i.test(raw) && output.includes('Rio');
+        return hasCall(allCalls, 'sqlite3') && /is\s+null/i.test(raw) && output.includes('Rio');
 
       case 'db-boundary':
-        return raw.includes('sqlite3') && (/>=\s*20/.test(raw) || /20\s*<=/.test(raw)) && output.trim() === '10';
+        return hasCall(allCalls, 'sqlite3') && (/>=\s*20/.test(raw) || /20\s*<=/.test(raw)) && output.trim() === '10';
+
+      case 'db-between':
+        return hasCall(allCalls, 'sqlite3') && /between\s+20\s+and\s+30/i.test(raw) && output.includes('Pip') && !output.includes('Nico');
 
       case 'db-join':
-        return raw.includes('sqlite3') && /join/i.test(raw) && /ended_at\s+is\s+null/i.test(raw) && output.includes('Momo|pro');
+        return hasCall(allCalls, 'sqlite3') && /join/i.test(raw) && /ended_at\s+is\s+null/i.test(raw) && output.includes('Momo|pro');
 
       case 'db-left-join':
-        return raw.includes('sqlite3') && (/left\s+join/i.test(raw) || /not\s+in/i.test(raw) || /not\s+exists/i.test(raw)) && output.includes('Kai');
+        return hasCall(allCalls, 'sqlite3') && (/left\s+join/i.test(raw) || /not\s+in/i.test(raw) || /not\s+exists/i.test(raw)) && output.includes('Kai');
 
       case 'db-update-where':
-        return raw.includes('sqlite3') && /update\s+members/i.test(raw) && /osaka/i.test(raw) &&
+        return hasCall(allCalls, 'sqlite3') && /update\s+members/i.test(raw) && /osaka/i.test(raw) &&
                sql.legacyMembers.find(m => m.id === 3)?.city === 'Osaka';
 
       case 'db-create-table':
-        return raw.includes('sqlite3') && /create\s+table/i.test(raw) && !!sql.customTables && !!sql.customTables.workouts;
+        return hasCall(allCalls, 'sqlite3') && /create\s+table/i.test(raw) && !!sql.customTables && !!sql.customTables.workouts;
 
       case 'db-insert-into':
-        return raw.includes('sqlite3') && /insert\s+into\s+members/i.test(raw) &&
+        return hasCall(allCalls, 'sqlite3') && /insert\s+into\s+members/i.test(raw) &&
                sql.members.some(m => m.name === 'Tux' && m.city === 'Tokyo');
 
       case 'db-delete-where':
-        return raw.includes('sqlite3') && /delete\s+from\s+members/i.test(raw) &&
-               !sql.legacyMembers.some(m => m.id === 11);
+        return hasCall(allCalls, 'sqlite3') && /delete\s+from\s+members/i.test(raw) &&
+               !sql.legacyMembers.some(m => m.id === 10) && sql.legacyMembers.length === 8;
 
       case 'db-like-search':
-        return raw.includes('sqlite3') && /like/i.test(raw) && output.includes('Pip') && !output.includes('Rio');
+        return hasCall(allCalls, 'sqlite3') && /like/i.test(raw) && output.includes('Pip') && !output.includes('Rio');
 
       case 'db-sum-avg':
-        return raw.includes('sqlite3') && /avg\s*\(\s*monthly_fee\s*\)/i.test(raw) && output.includes('3333.33');
+        return hasCall(allCalls, 'sqlite3') && /avg\s*\(\s*monthly_fee\s*\)/i.test(raw) && output.includes('3333.33');
 
       // ==========================================
-      // 11. INCIDENTES / BOSS CROSS-DOMAIN (5 lições)
+      // 11. INCIDENTES / BOSS CROSS-DOMAIN (5+ lições)
       // ==========================================
       case 'inc-nginx-404':
-        return allSessionText.includes('/var/log/nginx') && allSessionText.includes('404') &&
-               (cmd === 'ss' || cmd === 'netstat') && (output.includes('LISTEN') || output.includes('OUÇA'));
+        return allSessionText.includes('/var/log/nginx') &&
+               (effCmd === 'ss' || effCmd === 'netstat') &&
+               (output.includes('LISTEN') || output.includes('OUÇA'));
 
       case 'inc-postgresql-down':
         return commandEngine
@@ -929,12 +1138,17 @@ class LessonChecker {
         return !!docker &&
                !Array.from(docker.containers.values()).some(c => c.name === 'travado') &&
                !docker.images.has('nginx') &&
-               cmd === 'docker' && args[0] === 'rmi';
+               effCmd === 'docker' && effArgs[0] === 'rmi';
 
       case 'inc-backup-pipeline':
         return fs.getNode('/home/user/tokyo.csv') !== null &&
                fs.getNode('/home/user/tokyo.csv.gz') !== null &&
-               cmd === 'sha256sum' && raw.includes('tokyo.csv.gz') && output.length >= 64;
+               effCmd === 'sha256sum' && raw.includes('tokyo.csv.gz') && output.length >= 64;
+
+      case 'inc-script-perm-fix': {
+        const scr = fs.getNode('/home/user/deploy.sh');
+        return !!scr && scr.permissions.includes('x') && raw.includes('./deploy.sh') && output.includes('Deploy OK');
+      }
 
       default:
         if (lesson.answer && raw === lesson.answer.trim()) return true;

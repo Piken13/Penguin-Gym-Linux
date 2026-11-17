@@ -404,6 +404,23 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "file-mkdir-p",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Criar diretórios aninhados de uma vez",
+    "description": "Crie toda a hierarquia de pastas \"projeto/src/utils\" em um único comando, mesmo que os diretórios pais ainda não existam.",
+    "hint": "Use a opção -p do mkdir: mkdir -p projeto/src/utils",
+    "answer": "mkdir -p projeto/src/utils",
+    "answerSteps": [
+      "mkdir -p projeto/src/utils"
+    ],
+    "relatedCommands": [
+      "mkdir"
+    ]
+  },
+  {
     "id": "file-touch",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
@@ -419,6 +436,41 @@ const ALL_LESSONS = [
     "relatedCommands": [
       "touch",
       "mkdir"
+    ]
+  },
+  {
+    "id": "file-cp",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Copiar um arquivo",
+    "description": "Copie documents/readme.txt com o nome backup.txt.",
+    "hint": "Use o comando cp",
+    "answer": "cp documents/readme.txt backup.txt",
+    "answerSteps": [
+      "cp documents/readme.txt backup.txt"
+    ],
+    "relatedCommands": [
+      "cp",
+      "mv"
+    ]
+  },
+  {
+    "id": "file-mv-rename",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Renomear um arquivo com mv",
+    "description": "Renomeie o arquivo \"test.txt\" no diretório atual para \"renomeado.txt\".",
+    "hint": "No Linux, mover no mesmo diretório renomeia o arquivo: mv test.txt renomeado.txt",
+    "answer": "mv test.txt renomeado.txt",
+    "answerSteps": [
+      "mv test.txt renomeado.txt"
+    ],
+    "relatedCommands": [
+      "mv"
     ]
   },
   {
@@ -573,21 +625,20 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "file-cp",
+    "id": "file-cp-dir",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Copiar um arquivo",
-    "description": "Copie documents/readme.txt com o nome backup.txt.",
-    "hint": "Use o comando cp",
-    "answer": "cp documents/readme.txt backup.txt",
+    "title": "Copiar um diretório recursivamente",
+    "description": "Faça uma cópia completa da pasta documents (incluindo todos os arquivos dentro dela) para \"documents_backup\".",
+    "hint": "Para copiar diretórios com cp, adicione a opção recursiva -r: cp -r documents documents_backup",
+    "answer": "cp -r documents documents_backup",
     "answerSteps": [
-      "cp documents/readme.txt backup.txt"
+      "cp -r documents documents_backup"
     ],
     "relatedCommands": [
-      "cp",
-      "mv"
+      "cp"
     ]
   },
   {
@@ -645,39 +696,21 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "file-grep",
+    "id": "file-rm-recursive",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Buscar dentro de um arquivo",
-    "description": "Busque e exiba as linhas que contêm \"Linux\" em documents/readme.txt.",
-    "hint": "Use o comando grep",
-    "answer": "grep Linux documents/readme.txt",
+    "title": "Excluir diretório com arquivos dentro",
+    "description": "Exclua a pasta \"pasta_antiga\" e todo o seu conteúdo de forma recursiva.",
+    "hint": "rmdir só apaga pastas vazias; para pastas com arquivos use rm -r pasta_antiga",
+    "answer": "rm -r pasta_antiga",
     "answerSteps": [
-      "grep Linux documents/readme.txt"
+      "rm -r pasta_antiga"
     ],
     "relatedCommands": [
-      "grep",
-      "find"
-    ]
-  },
-  {
-    "id": "permission-ls-l",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Verificar permissões de arquivo",
-    "description": "Exiba as informações detalhadas dos arquivos (incluindo permissões).",
-    "hint": "Use o comando ls -l (combinações com outras opções também são permitidas)",
-    "answer": "ls -l",
-    "answerSteps": [
-      "ls -l"
-    ],
-    "relatedCommands": [
-      "chmod",
-      "ls"
+      "rm",
+      "rmdir"
     ]
   },
   {
@@ -699,6 +732,24 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "file-grep",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Buscar dentro de um arquivo",
+    "description": "Busque e exiba as linhas que contêm \"Linux\" em documents/readme.txt.",
+    "hint": "Use o comando grep",
+    "answer": "grep Linux documents/readme.txt",
+    "answerSteps": [
+      "grep Linux documents/readme.txt"
+    ],
+    "relatedCommands": [
+      "grep",
+      "find"
+    ]
+  },
+  {
     "id": "advanced-grep-ignore-case",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
@@ -710,6 +761,23 @@ const ALL_LESSONS = [
     "answer": "grep -i linux documents/readme.txt",
     "answerSteps": [
       "grep -i linux documents/readme.txt"
+    ],
+    "relatedCommands": [
+      "grep"
+    ]
+  },
+  {
+    "id": "advanced-grep-invert",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Filtrar linhas que NÃO contêm um termo",
+    "description": "Exiba apenas as linhas do arquivo dados.txt que NÃO contêm a palavra \"inativo\" (mostrando somente os servidores ativos).",
+    "hint": "Use a opção -v (invert-match) do grep: grep -v inativo dados.txt",
+    "answer": "grep -v inativo dados.txt",
+    "answerSteps": [
+      "grep -v inativo dados.txt"
     ],
     "relatedCommands": [
       "grep"
@@ -842,6 +910,23 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "text-sort-numeric",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Ordenar valores numéricos corretamente",
+    "description": "Ordene o arquivo numeros.txt em ordem numérica crescente (2 antes de 100, e não em ordem alfabética).",
+    "hint": "Sem -n, \"100\" vem antes de \"2\". Use sort -n numeros.txt",
+    "answer": "sort -n numeros.txt",
+    "answerSteps": [
+      "sort -n numeros.txt"
+    ],
+    "relatedCommands": [
+      "sort"
+    ]
+  },
+  {
     "id": "text-uniq-basic",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
@@ -879,6 +964,24 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "text-sort-uniq-combo",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Ordenar antes de contar ocorrências com uniq",
+    "description": "O arquivo bagunca.txt possui linhas repetidas fora de ordem. Ordene-o e conte quantas vezes cada item aparece usando pipeline.",
+    "hint": "Combine sort e uniq -c com pipe: sort bagunca.txt | uniq -c",
+    "answer": "sort bagunca.txt | uniq -c",
+    "answerSteps": [
+      "sort bagunca.txt | uniq -c"
+    ],
+    "relatedCommands": [
+      "sort",
+      "uniq"
+    ]
+  },
+  {
     "id": "file-diff-comparison",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
@@ -897,6 +1000,60 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "permission-ls-l",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Verificar permissões de arquivo",
+    "description": "Exiba as informações detalhadas dos arquivos (incluindo permissões).",
+    "hint": "Use o comando ls -l (combinações com outras opções também são permitidas)",
+    "answer": "ls -l",
+    "answerSteps": [
+      "ls -l"
+    ],
+    "relatedCommands": [
+      "chmod",
+      "ls"
+    ]
+  },
+  {
+    "id": "permission-chmod",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Alterar permissões de arquivo",
+    "description": "Adicione permissão de execução ao arquivo test.txt.",
+    "hint": "Use o comando chmod. Exemplo: chmod 755 ou chmod +x",
+    "answer": "chmod +x test.txt",
+    "answerSteps": [
+      "chmod +x test.txt"
+    ],
+    "relatedCommands": [
+      "chmod",
+      "chown"
+    ]
+  },
+  {
+    "id": "permission-chmod-octal",
+    "category": "fundamentals",
+    "categoryLabel": "Fundamentos",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Definir permissões com modo octal",
+    "description": "Proteja o arquivo \"segredo.txt\" deixando leitura e gravação apenas para o proprietário (600 em octal).",
+    "hint": "600 equivale a rw------- (dono lê/escreve, grupo e outros sem acesso): chmod 600 segredo.txt",
+    "answer": "chmod 600 segredo.txt",
+    "answerSteps": [
+      "chmod 600 segredo.txt"
+    ],
+    "relatedCommands": [
+      "chmod",
+      "ls -l"
+    ]
+  },
+  {
     "id": "file-find",
     "category": "fundamentals",
     "categoryLabel": "Fundamentos",
@@ -912,24 +1069,6 @@ const ALL_LESSONS = [
     "relatedCommands": [
       "find",
       "grep"
-    ]
-  },
-  {
-    "id": "permission-chmod",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Avançado",
-    "lpicObjective": null,
-    "title": "Alterar permissões de arquivo",
-    "description": "Adicione permissão de execução ao arquivo test.txt.",
-    "hint": "Use o comando chmod. Exemplo: chmod 755 ou chmod +x",
-    "answer": "chmod +x test.txt",
-    "answerSteps": [
-      "chmod +x test.txt"
-    ],
-    "relatedCommands": [
-      "chmod",
-      "chown"
     ]
   },
   {
@@ -984,145 +1123,6 @@ const ALL_LESSONS = [
     "relatedCommands": [
       "sudo",
       "mkdir"
-    ]
-  },
-  {
-    "id": "file-mkdir-p",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Criar diretórios aninhados de uma vez",
-    "description": "Crie toda a hierarquia de pastas \"projeto/src/utils\" em um único comando, mesmo que os diretórios pais ainda não existam.",
-    "hint": "Use a opção -p do mkdir: mkdir -p projeto/src/utils",
-    "answer": "mkdir -p projeto/src/utils",
-    "answerSteps": [
-      "mkdir -p projeto/src/utils"
-    ],
-    "relatedCommands": [
-      "mkdir"
-    ]
-  },
-  {
-    "id": "file-cp-dir",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Copiar um diretório recursivamente",
-    "description": "Faça uma cópia completa da pasta documents (incluindo todos os arquivos dentro dela) para \"documents_backup\".",
-    "hint": "Para copiar diretórios com cp, adicione a opção recursiva -r: cp -r documents documents_backup",
-    "answer": "cp -r documents documents_backup",
-    "answerSteps": [
-      "cp -r documents documents_backup"
-    ],
-    "relatedCommands": [
-      "cp"
-    ]
-  },
-  {
-    "id": "file-mv-rename",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Renomear um arquivo com mv",
-    "description": "Renomeie o arquivo \"test.txt\" no diretório atual para \"renomeado.txt\".",
-    "hint": "No Linux, mover no mesmo diretório renomeia o arquivo: mv test.txt renomeado.txt",
-    "answer": "mv test.txt renomeado.txt",
-    "answerSteps": [
-      "mv test.txt renomeado.txt"
-    ],
-    "relatedCommands": [
-      "mv"
-    ]
-  },
-  {
-    "id": "file-rm-recursive",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Excluir diretório com arquivos dentro",
-    "description": "Exclua a pasta \"pasta_antiga\" e todo o seu conteúdo de forma recursiva.",
-    "hint": "rmdir só apaga pastas vazias; para pastas com arquivos use rm -r pasta_antiga",
-    "answer": "rm -r pasta_antiga",
-    "answerSteps": [
-      "rm -r pasta_antiga"
-    ],
-    "relatedCommands": [
-      "rm",
-      "rmdir"
-    ]
-  },
-  {
-    "id": "permission-chmod-octal",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Definir permissões com modo octal",
-    "description": "Proteja o arquivo \"segredo.txt\" deixando leitura e gravação apenas para o proprietário (600 em octal).",
-    "hint": "600 equivale a rw------- (dono lê/escreve, grupo e outros sem acesso): chmod 600 segredo.txt",
-    "answer": "chmod 600 segredo.txt",
-    "answerSteps": [
-      "chmod 600 segredo.txt"
-    ],
-    "relatedCommands": [
-      "chmod",
-      "ls -l"
-    ]
-  },
-  {
-    "id": "advanced-grep-invert",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Filtrar linhas que NÃO contêm um termo",
-    "description": "Exiba apenas as linhas do arquivo dados.txt que NÃO contêm a palavra \"inativo\" (mostrando somente os servidores ativos).",
-    "hint": "Use a opção -v (invert-match) do grep: grep -v inativo dados.txt",
-    "answer": "grep -v inativo dados.txt",
-    "answerSteps": [
-      "grep -v inativo dados.txt"
-    ],
-    "relatedCommands": [
-      "grep"
-    ]
-  },
-  {
-    "id": "text-sort-uniq-combo",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Ordenar antes de contar ocorrências com uniq",
-    "description": "O arquivo bagunca.txt possui linhas repetidas fora de ordem. Ordene-o e conte quantas vezes cada item aparece usando pipeline.",
-    "hint": "Combine sort e uniq -c com pipe: sort bagunca.txt | uniq -c",
-    "answer": "sort bagunca.txt | uniq -c",
-    "answerSteps": [
-      "sort bagunca.txt | uniq -c"
-    ],
-    "relatedCommands": [
-      "sort",
-      "uniq"
-    ]
-  },
-  {
-    "id": "text-sort-numeric",
-    "category": "fundamentals",
-    "categoryLabel": "Fundamentos",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Ordenar valores numéricos corretamente",
-    "description": "Ordene o arquivo numeros.txt em ordem numérica crescente (2 antes de 100, e não em ordem alfabética).",
-    "hint": "Sem -n, \"100\" vem antes de \"2\". Use sort -n numeros.txt",
-    "answer": "sort -n numeros.txt",
-    "answerSteps": [
-      "sort -n numeros.txt"
-    ],
-    "relatedCommands": [
-      "sort"
     ]
   },
   {
@@ -1321,6 +1321,60 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "sys-groups-check",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Consultar grupos de um usuário",
+    "description": "Verifique a quais grupos a conta \"devops\" pertence no momento.",
+    "hint": "Execute groups devops",
+    "answer": "groups devops",
+    "answerSteps": [
+      "groups devops"
+    ],
+    "relatedCommands": [
+      "groups",
+      "id"
+    ]
+  },
+  {
+    "id": "system-uname",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Consultar versão do kernel e arquitetura",
+    "description": "Exiba todas as informações do sistema operacional e versão do kernel Linux em execução.",
+    "hint": "Execute uname -a",
+    "answer": "uname -a",
+    "answerSteps": [
+      "uname -a"
+    ],
+    "relatedCommands": [
+      "uname",
+      "lscpu"
+    ]
+  },
+  {
+    "id": "system-uptime",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Verificar tempo de atividade e carga da máquina",
+    "description": "Consulte há quanto tempo o servidor está ligado e a média de carga (load average).",
+    "hint": "Execute uptime",
+    "answer": "uptime",
+    "answerSteps": [
+      "uptime"
+    ],
+    "relatedCommands": [
+      "uptime",
+      "top"
+    ]
+  },
+  {
     "id": "sys-sudo-root-session",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
@@ -1344,7 +1398,7 @@ const ALL_LESSONS = [
     "id": "sys-session-exit",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
-    "difficulty": "Iniciante",
+    "difficulty": "Intermediário",
     "lpicObjective": "103.1",
     "title": "Encerrar sessão de usuário atual",
     "description": "Após iniciar uma sessão como superusuário ou subshell, finalize a sessão atual com exit para retornar ao usuário anterior.",
@@ -1398,6 +1452,57 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "sys-systemctl-stop",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Interromper um serviço ativo",
+    "description": "Pare a execução do serviço web \"nginx\" imediatamente com systemctl.",
+    "hint": "Execute sudo systemctl stop nginx",
+    "answer": "sudo systemctl stop nginx",
+    "answerSteps": [
+      "sudo systemctl stop nginx"
+    ],
+    "relatedCommands": [
+      "systemctl"
+    ]
+  },
+  {
+    "id": "sys-systemctl-start",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Iniciar um serviço que está parado",
+    "description": "O banco \"postgresql\" encontra-se inativo no sistema. Inicie o serviço usando systemctl.",
+    "hint": "Execute sudo systemctl start postgresql",
+    "answer": "sudo systemctl start postgresql",
+    "answerSteps": [
+      "sudo systemctl start postgresql"
+    ],
+    "relatedCommands": [
+      "systemctl"
+    ]
+  },
+  {
+    "id": "sys-systemctl-disable",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Desabilitar inicialização automática no boot",
+    "description": "Remova o serviço \"nginx\" da inicialização automática durante o boot.",
+    "hint": "Execute sudo systemctl disable nginx",
+    "answer": "sudo systemctl disable nginx",
+    "answerSteps": [
+      "sudo systemctl disable nginx"
+    ],
+    "relatedCommands": [
+      "systemctl"
+    ]
+  },
+  {
     "id": "sys-journalctl-unit",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
@@ -1434,84 +1539,6 @@ const ALL_LESSONS = [
       "sudo apt install",
       "sudo apt remove",
       "dpkg -i"
-    ]
-  },
-  {
-    "id": "sys-dpkg-list",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Intermediário",
-    "lpicObjective": "102.4",
-    "title": "Listar todos os pacotes instalados",
-    "description": "Consulte a base de dados de baixo nível para listar todos os pacotes de software instalados no sistema.",
-    "hint": "Execute dpkg -l",
-    "answer": "dpkg -l",
-    "answerSteps": [
-      "dpkg -l"
-    ],
-    "relatedCommands": [
-      "dpkg -l",
-      "dpkg -s",
-      "apt list --installed"
-    ]
-  },
-  {
-    "id": "sys-crontab-list",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Intermediário",
-    "lpicObjective": "107.2",
-    "title": "Visualizar agendamentos de tarefas periódicas",
-    "description": "Exiba a tabela de rotinas programadas do usuário atual para verificar quais scripts rodam automaticamente.",
-    "hint": "Execute crontab -l",
-    "answer": "crontab -l",
-    "answerSteps": [
-      "crontab -l"
-    ],
-    "relatedCommands": [
-      "crontab -l",
-      "crontab -e",
-      "crontab -r",
-      "at"
-    ]
-  },
-  {
-    "id": "sys-dmesg",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Intermediário",
-    "lpicObjective": "101.1",
-    "title": "Consultar mensagens e diagnósticos do kernel",
-    "description": "Exiba o buffer de mensagens e diagnósticos de hardware gerados pelo kernel durante o funcionamento do sistema.",
-    "hint": "Execute dmesg",
-    "answer": "dmesg",
-    "answerSteps": [
-      "dmesg"
-    ],
-    "relatedCommands": [
-      "dmesg",
-      "journalctl -k",
-      "uname -a"
-    ]
-  },
-  {
-    "id": "sys-useradd",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Avançado",
-    "lpicObjective": "107.1",
-    "title": "Criar nova conta de usuário no sistema",
-    "description": "Cadastre um novo usuário no sistema chamado \"devops\", assegurando que sua pasta pessoal (/home/devops) seja criada.",
-    "hint": "Execute sudo useradd -m devops",
-    "answer": "sudo useradd -m devops",
-    "answerSteps": [
-      "sudo useradd -m devops"
-    ],
-    "relatedCommands": [
-      "sudo useradd -m",
-      "sudo userdel -r",
-      "passwd",
-      "usermod"
     ]
   },
   {
@@ -1584,54 +1611,41 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "sys-systemctl-stop",
+    "id": "sys-dpkg-list",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
     "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Interromper um serviço ativo",
-    "description": "Pare a execução do serviço web \"nginx\" imediatamente com systemctl.",
-    "hint": "Execute sudo systemctl stop nginx",
-    "answer": "sudo systemctl stop nginx",
+    "lpicObjective": "102.4",
+    "title": "Listar todos os pacotes instalados",
+    "description": "Consulte a base de dados de baixo nível para listar todos os pacotes de software instalados no sistema.",
+    "hint": "Execute dpkg -l",
+    "answer": "dpkg -l",
     "answerSteps": [
-      "sudo systemctl stop nginx"
+      "dpkg -l"
     ],
     "relatedCommands": [
-      "systemctl"
+      "dpkg -l",
+      "dpkg -s",
+      "apt list --installed"
     ]
   },
   {
-    "id": "sys-systemctl-start",
+    "id": "sys-dmesg",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
     "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Iniciar um serviço que está parado",
-    "description": "O banco \"postgresql\" encontra-se inativo no sistema. Inicie o serviço usando systemctl.",
-    "hint": "Execute sudo systemctl start postgresql",
-    "answer": "sudo systemctl start postgresql",
+    "lpicObjective": "101.1",
+    "title": "Consultar mensagens e diagnósticos do kernel",
+    "description": "Exiba o buffer de mensagens e diagnósticos de hardware gerados pelo kernel durante o funcionamento do sistema.",
+    "hint": "Execute dmesg",
+    "answer": "dmesg",
     "answerSteps": [
-      "sudo systemctl start postgresql"
+      "dmesg"
     ],
     "relatedCommands": [
-      "systemctl"
-    ]
-  },
-  {
-    "id": "sys-systemctl-disable",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Desabilitar inicialização automática no boot",
-    "description": "Remova o serviço \"nginx\" da inicialização automática durante o boot.",
-    "hint": "Execute sudo systemctl disable nginx",
-    "answer": "sudo systemctl disable nginx",
-    "answerSteps": [
-      "sudo systemctl disable nginx"
-    ],
-    "relatedCommands": [
-      "systemctl"
+      "dmesg",
+      "journalctl -k",
+      "uname -a"
     ]
   },
   {
@@ -1652,6 +1666,26 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "sys-useradd",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Intermediário",
+    "lpicObjective": "107.1",
+    "title": "Criar nova conta de usuário no sistema",
+    "description": "Cadastre um novo usuário no sistema chamado \"devops\", assegurando que sua pasta pessoal (/home/devops) seja criada.",
+    "hint": "Execute sudo useradd -m devops",
+    "answer": "sudo useradd -m devops",
+    "answerSteps": [
+      "sudo useradd -m devops"
+    ],
+    "relatedCommands": [
+      "sudo useradd -m",
+      "sudo userdel -r",
+      "passwd",
+      "usermod"
+    ]
+  },
+  {
     "id": "sys-usermod-group",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
@@ -1667,24 +1701,6 @@ const ALL_LESSONS = [
     "relatedCommands": [
       "usermod",
       "groups"
-    ]
-  },
-  {
-    "id": "sys-groups-check",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Consultar grupos de um usuário",
-    "description": "Verifique a quais grupos a conta \"devops\" pertence no momento.",
-    "hint": "Execute groups devops",
-    "answer": "groups devops",
-    "answerSteps": [
-      "groups devops"
-    ],
-    "relatedCommands": [
-      "groups",
-      "id"
     ]
   },
   {
@@ -1722,10 +1738,30 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "sys-crontab-list",
+    "category": "sysadmin",
+    "categoryLabel": "Sysadmin",
+    "difficulty": "Intermediário",
+    "lpicObjective": "107.2",
+    "title": "Visualizar agendamentos de tarefas periódicas",
+    "description": "Exiba a tabela de rotinas programadas do usuário atual para verificar quais scripts rodam automaticamente.",
+    "hint": "Execute crontab -l",
+    "answer": "crontab -l",
+    "answerSteps": [
+      "crontab -l"
+    ],
+    "relatedCommands": [
+      "crontab -l",
+      "crontab -e",
+      "crontab -r",
+      "at"
+    ]
+  },
+  {
     "id": "sys-crontab-edit",
     "category": "sysadmin",
     "categoryLabel": "Sysadmin",
-    "difficulty": "Avançado",
+    "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Editar agendamentos do crontab",
     "description": "Abra o editor do seu crontab pessoal com crontab -e, adicione uma nova rotina (ex: 0 4 * * * /bin/true) e grave com Ctrl+O (^O).",
@@ -1753,42 +1789,6 @@ const ALL_LESSONS = [
     ],
     "relatedCommands": [
       "crontab"
-    ]
-  },
-  {
-    "id": "system-uname",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Consultar versão do kernel e arquitetura",
-    "description": "Exiba todas as informações do sistema operacional e versão do kernel Linux em execução.",
-    "hint": "Execute uname -a",
-    "answer": "uname -a",
-    "answerSteps": [
-      "uname -a"
-    ],
-    "relatedCommands": [
-      "uname",
-      "lscpu"
-    ]
-  },
-  {
-    "id": "system-uptime",
-    "category": "sysadmin",
-    "categoryLabel": "Sysadmin",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Verificar tempo de atividade e carga da máquina",
-    "description": "Consulte há quanto tempo o servidor está ligado e a média de carga (load average).",
-    "hint": "Execute uptime",
-    "answer": "uptime",
-    "answerSteps": [
-      "uptime"
-    ],
-    "relatedCommands": [
-      "uptime",
-      "top"
     ]
   },
   {
@@ -1884,23 +1884,57 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "text-tee-pipe",
+    "id": "process-du-summary",
     "category": "advanced",
     "categoryLabel": "Avançado",
     "difficulty": "Intermediário",
-    "lpicObjective": "103.4",
-    "title": "Duplicar saída entre tela e arquivo",
-    "description": "Liste os arquivos detalhados (formato longo) e faça com que o resultado seja exibido no terminal e gravado simultaneamente em 'relatorio.txt'.",
-    "hint": "Execute ls -l | tee relatorio.txt",
-    "answer": "ls -l | tee relatorio.txt",
+    "lpicObjective": null,
+    "title": "Resumir o tamanho total de uma pasta",
+    "description": "Exiba apenas o tamanho total resumido (em KB/MB legíveis) do diretório \"documents\", sem listar cada subpasta.",
+    "hint": "Combine -s (summary) com -h: du -sh documents",
+    "answer": "du -sh documents",
     "answerSteps": [
-      "ls -l | tee relatorio.txt"
+      "du -sh documents"
     ],
     "relatedCommands": [
-      "tee",
-      "tee -a",
-      ">",
-      ">>"
+      "du",
+      "df"
+    ]
+  },
+  {
+    "id": "process-pgrep",
+    "category": "advanced",
+    "categoryLabel": "Avançado",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Buscar PID de um processo pelo nome",
+    "description": "Encontre o PID e o nome do processo \"nginx\" sem precisar filtrar ps aux manualmente.",
+    "hint": "Use pgrep com -l para mostrar PID e nome: pgrep -l nginx",
+    "answer": "pgrep -l nginx",
+    "answerSteps": [
+      "pgrep -l nginx"
+    ],
+    "relatedCommands": [
+      "pgrep",
+      "ps"
+    ]
+  },
+  {
+    "id": "process-kill",
+    "category": "advanced",
+    "categoryLabel": "Avançado",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Encerrar um processo em execução",
+    "description": "Finalize o processo nginx em execução de PID 123 enviando o sinal padrão de término.",
+    "hint": "Confira o PID com ps aux e execute kill 123",
+    "answer": "kill 123",
+    "answerSteps": [
+      "kill 123"
+    ],
+    "relatedCommands": [
+      "kill",
+      "ps"
     ]
   },
   {
@@ -1947,8 +1981,8 @@ const ALL_LESSONS = [
     "categoryLabel": "Avançado",
     "difficulty": "Intermediário",
     "lpicObjective": "103.2",
-    "title": "Formatar e identar estrutura JSON",
-    "description": "Processe e formate o conteúdo do arquivo 'config.json' exibindo a estrutura JSON colorida e identada.",
+    "title": "Formatar e indentar estrutura JSON",
+    "description": "Processe e formate o conteúdo do arquivo 'config.json' exibindo a estrutura JSON indentada.",
     "hint": "Execute cat config.json | jq .",
     "answer": "cat config.json | jq .",
     "answerSteps": [
@@ -1961,21 +1995,40 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "process-kill",
+    "id": "text-jq-filter",
     "category": "advanced",
     "categoryLabel": "Avançado",
-    "difficulty": "Avançado",
+    "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Encerrar um processo em execução",
-    "description": "Finalize o processo nginx em execução de PID 123 enviando o sinal padrão de término.",
-    "hint": "Confira o PID com ps aux e execute kill 123",
-    "answer": "kill 123",
+    "title": "Extrair um campo específico de JSON com jq",
+    "description": "Leia o arquivo config.json e extraia exclusivamente o valor da chave \"version\" usando jq.",
+    "hint": "Execute cat config.json | jq .version (ou jq .version config.json)",
+    "answer": "cat config.json | jq .version",
     "answerSteps": [
-      "kill 123"
+      "cat config.json | jq .version"
     ],
     "relatedCommands": [
-      "kill",
-      "ps"
+      "jq"
+    ]
+  },
+  {
+    "id": "text-tee-pipe",
+    "category": "advanced",
+    "categoryLabel": "Avançado",
+    "difficulty": "Intermediário",
+    "lpicObjective": "103.4",
+    "title": "Duplicar saída entre tela e arquivo",
+    "description": "Liste os arquivos detalhados (formato longo) e faça com que o resultado seja exibido no terminal e gravado simultaneamente em 'relatorio.txt'.",
+    "hint": "Execute ls -l | tee relatorio.txt",
+    "answer": "ls -l | tee relatorio.txt",
+    "answerSteps": [
+      "ls -l | tee relatorio.txt"
+    ],
+    "relatedCommands": [
+      "tee",
+      "tee -a",
+      ">",
+      ">>"
     ]
   },
   {
@@ -2071,6 +2124,23 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "text-sed-delete",
+    "category": "advanced",
+    "categoryLabel": "Avançado",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Remover linhas correspondentes com sed",
+    "description": "Exiba o conteúdo de dados.txt excluindo da saída todas as linhas que contenham a palavra \"inativo\".",
+    "hint": "Use o comando /padrao/d no sed: sed '/inativo/d' dados.txt",
+    "answer": "sed '/inativo/d' dados.txt",
+    "answerSteps": [
+      "sed '/inativo/d' dados.txt"
+    ],
+    "relatedCommands": [
+      "sed"
+    ]
+  },
+  {
     "id": "text-awk-columns",
     "category": "advanced",
     "categoryLabel": "Avançado",
@@ -2109,6 +2179,23 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "text-awk-filter",
+    "category": "advanced",
+    "categoryLabel": "Avançado",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Filtrar linhas condicionalmente com awk",
+    "description": "Processe o arquivo dados.txt e imprima apenas o nome (1ª coluna) dos servidores cujo status (3ª coluna) seja igual a \"ativo\".",
+    "hint": "Execute awk '$3 == \"ativo\" {print $1}' dados.txt",
+    "answer": "awk '$3 == \"ativo\" {print $1}' dados.txt",
+    "answerSteps": [
+      "awk '$3 == \"ativo\" {print $1}' dados.txt"
+    ],
+    "relatedCommands": [
+      "awk"
+    ]
+  },
+  {
     "id": "text-xargs-basic",
     "category": "advanced",
     "categoryLabel": "Avançado",
@@ -2128,28 +2215,10 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "process-du-summary",
-    "category": "advanced",
-    "categoryLabel": "Avançado",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Resumir o tamanho total de uma pasta",
-    "description": "Exiba apenas o tamanho total resumido (em KB/MB legíveis) do diretório \"documents\", sem listar cada subpasta.",
-    "hint": "Combine -s (summary) com -h: du -sh documents",
-    "answer": "du -sh documents",
-    "answerSteps": [
-      "du -sh documents"
-    ],
-    "relatedCommands": [
-      "du",
-      "df"
-    ]
-  },
-  {
     "id": "process-kill-sigkill",
     "category": "advanced",
     "categoryLabel": "Avançado",
-    "difficulty": "Intermediário",
+    "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Forçar encerramento imediato com SIGKILL",
     "description": "Quando um processo trava e ignora SIGTERM, envie o sinal -9 (SIGKILL) para forçar o encerramento do PID 123.",
@@ -2164,28 +2233,10 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "process-pgrep",
-    "category": "advanced",
-    "categoryLabel": "Avançado",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Buscar PID de um processo pelo nome",
-    "description": "Encontre o PID e o nome do processo \"nginx\" sem precisar filtrar ps aux manualmente.",
-    "hint": "Use pgrep com -l para mostrar PID e nome: pgrep -l nginx",
-    "answer": "pgrep -l nginx",
-    "answerSteps": [
-      "pgrep -l nginx"
-    ],
-    "relatedCommands": [
-      "pgrep",
-      "ps"
-    ]
-  },
-  {
     "id": "process-pkill",
     "category": "advanced",
     "categoryLabel": "Avançado",
-    "difficulty": "Intermediário",
+    "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Encerrar processos diretamente pelo nome",
     "description": "Finalize o processo \"nginx\" diretamente pelo seu nome sem precisar informar o PID numérico.",
@@ -2208,7 +2259,7 @@ const ALL_LESSONS = [
     "title": "Executar tarefa em background e listar jobs",
     "description": "Inicie o comando \"sleep 60\" em segundo plano usando & e depois liste as tarefas em segundo plano da sessão atual.",
     "hint": "Execute sleep 60 & e depois jobs",
-    "answer": "sleep 60 &",
+    "answer": "sleep 60 & jobs",
     "answerSteps": [
       "sleep 60 &",
       "jobs"
@@ -2220,64 +2271,13 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "text-jq-filter",
-    "category": "advanced",
-    "categoryLabel": "Avançado",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Extrair um campo específico de JSON com jq",
-    "description": "Leia o arquivo config.json e extraia exclusivamente o valor da chave \"version\" usando jq.",
-    "hint": "Execute cat config.json | jq .version (ou jq .version config.json)",
-    "answer": "cat config.json | jq .version",
-    "answerSteps": [
-      "cat config.json | jq .version"
-    ],
-    "relatedCommands": [
-      "jq"
-    ]
-  },
-  {
-    "id": "text-awk-filter",
-    "category": "advanced",
-    "categoryLabel": "Avançado",
-    "difficulty": "Avançado",
-    "lpicObjective": null,
-    "title": "Filtrar linhas condicionalmente com awk",
-    "description": "Processe o arquivo dados.txt e imprima apenas o nome (1ª coluna) dos servidores cujo status (3ª coluna) seja igual a \"ativo\".",
-    "hint": "Execute awk '$3 == \"ativo\" {print $1}' dados.txt",
-    "answer": "awk '$3 == \"ativo\" {print $1}' dados.txt",
-    "answerSteps": [
-      "awk '$3 == \"ativo\" {print $1}' dados.txt"
-    ],
-    "relatedCommands": [
-      "awk"
-    ]
-  },
-  {
-    "id": "text-sed-delete",
-    "category": "advanced",
-    "categoryLabel": "Avançado",
-    "difficulty": "Avançado",
-    "lpicObjective": null,
-    "title": "Remover linhas correspondentes com sed",
-    "description": "Exiba o conteúdo de dados.txt excluindo da saída todas as linhas que contenham a palavra \"inativo\".",
-    "hint": "Use o comando /padrao/d no sed: sed '/inativo/d' dados.txt",
-    "answer": "sed '/inativo/d' dados.txt",
-    "answerSteps": [
-      "sed '/inativo/d' dados.txt"
-    ],
-    "relatedCommands": [
-      "sed"
-    ]
-  },
-  {
     "id": "lpic-tar-list",
     "category": "lpic",
     "categoryLabel": "LPIC-1",
     "difficulty": "Iniciante",
     "lpicObjective": "103.3",
-    "title": "Inspecionar conteúdo de um pacote compactado",
-    "description": "Exiba a lista de arquivos contidos dentro do pacote compactado 'docs.tar' sem extraí-los no disco.",
+    "title": "Inspecionar conteúdo de um arquivo empacotado (.tar)",
+    "description": "Exiba a lista de arquivos contidos dentro do arquivo empacotado 'docs.tar' (tar apenas empacota; gzip comprime) sem extraí-los no disco.",
     "hint": "Execute tar -tf docs.tar",
     "answer": "tar -tf docs.tar",
     "answerSteps": [
@@ -2324,6 +2324,42 @@ const ALL_LESSONS = [
       "gzip",
       "gunzip",
       "cat"
+    ]
+  },
+  {
+    "id": "lpic-zip-create",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Iniciante",
+    "lpicObjective": "103.3",
+    "title": "Compactar diretório no formato .zip",
+    "description": "Crie um arquivo compactado chamado \"proj.zip\" contendo recursivamente a pasta \"projects\".",
+    "hint": "Execute zip -r proj.zip projects",
+    "answer": "zip -r proj.zip projects",
+    "answerSteps": [
+      "zip -r proj.zip projects"
+    ],
+    "relatedCommands": [
+      "zip",
+      "unzip"
+    ]
+  },
+  {
+    "id": "lpic-unzip-extract",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Iniciante",
+    "lpicObjective": "103.3",
+    "title": "Extrair pacote .zip para outra pasta",
+    "description": "Descompacte o arquivo \"proj.zip\" extraindo seu conteúdo dentro da pasta \"downloads\".",
+    "hint": "Use -d para escolher o diretório de destino: unzip proj.zip -d downloads",
+    "answer": "unzip proj.zip -d downloads",
+    "answerSteps": [
+      "unzip proj.zip -d downloads"
+    ],
+    "relatedCommands": [
+      "unzip",
+      "zip"
     ]
   },
   {
@@ -2459,6 +2495,24 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "lpic-readlink",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Intermediário",
+    "lpicObjective": "104.6",
+    "title": "Descobrir o destino real de um link simbólico",
+    "description": "Verifique para qual arquivo original o link simbólico \"readme-link\" está apontando.",
+    "hint": "Execute readlink readme-link",
+    "answer": "readlink readme-link",
+    "answerSteps": [
+      "readlink readme-link"
+    ],
+    "relatedCommands": [
+      "readlink",
+      "ln"
+    ]
+  },
+  {
     "id": "lpic-ln-hardlink",
     "category": "lpic",
     "categoryLabel": "LPIC-1",
@@ -2483,8 +2537,8 @@ const ALL_LESSONS = [
     "categoryLabel": "LPIC-1",
     "difficulty": "Intermediário",
     "lpicObjective": "103.3",
-    "title": "Criar um arquivo compactado",
-    "description": "Agrupe o diretório documents em um arquivo chamado \"docs.tar\".",
+    "title": "Criar um arquivo empacotado (.tar)",
+    "description": "Empacote o diretório documents em um único arquivo chamado \"docs.tar\" (sem compressão).",
     "hint": "Use o comando tar -cf (exemplo: tar -cf docs.tar documents)",
     "answer": "tar -cf docs.tar documents",
     "answerSteps": [
@@ -2501,8 +2555,8 @@ const ALL_LESSONS = [
     "categoryLabel": "LPIC-1",
     "difficulty": "Intermediário",
     "lpicObjective": "103.3",
-    "title": "Extrair um arquivo compactado",
-    "description": "Agrupe o diretório projects em um arquivo chamado \"proj.tar\" e, em seguida, extraia seu conteúdo com tar -xf.",
+    "title": "Empacotar e extrair um arquivo .tar",
+    "description": "Empacote o diretório projects em um arquivo chamado \"proj.tar\" e, em seguida, extraia seu conteúdo com tar -xf.",
     "hint": "Execute tar -cf proj.tar projects && tar -xf proj.tar",
     "answer": "tar -cf proj.tar projects && tar -xf proj.tar",
     "answerSteps": [
@@ -2515,57 +2569,75 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "lpic-find-exec-cat",
+    "id": "lpic-tar-gzip-create",
     "category": "lpic",
     "categoryLabel": "LPIC-1",
     "difficulty": "Intermediário",
     "lpicObjective": "103.3",
-    "title": "Exibir o conteúdo de arquivos com find e -exec",
-    "description": "Busque os arquivos \".txt\" em documents e exiba o conteúdo de cada arquivo encontrado com cat.",
-    "hint": "Use find documents -name \"*.txt\" -exec cat {} \\;",
-    "answer": "find documents -name \"*.txt\" -exec cat {} \\;",
+    "title": "Criar arquivo .tar.gz comprimido com gzip",
+    "description": "Empacote e comprima a pasta documents em um único arquivo \"docs.tar.gz\" usando tar com a opção -z.",
+    "hint": "Execute tar -czf docs.tar.gz documents",
+    "answer": "tar -czf docs.tar.gz documents",
     "answerSteps": [
-      "find documents -name \"*.txt\" -exec cat {} \\;"
+      "tar -czf docs.tar.gz documents"
     ],
     "relatedCommands": [
-      "find",
-      "cat"
+      "tar",
+      "gzip"
     ]
   },
   {
-    "id": "lpic-grep-recursive",
+    "id": "lpic-tar-extract-dir",
     "category": "lpic",
     "categoryLabel": "LPIC-1",
     "difficulty": "Intermediário",
-    "lpicObjective": "103.7",
-    "title": "Buscar recursivamente em diretórios",
-    "description": "Busque recursivamente no diretório documents e exiba as linhas que contêm \"Linux\".",
-    "hint": "Use o comando grep -r (exemplo: grep -r Linux documents)",
-    "answer": "grep -r Linux documents",
+    "lpicObjective": "103.3",
+    "title": "Extrair pacote .tar.gz em diretório específico",
+    "description": "Extraia o arquivo empacotado e comprimido 'archive.tar.gz' diretamente dentro da pasta downloads.",
+    "hint": "Use a opção -C para definir o destino: tar -xzf archive.tar.gz -C downloads",
+    "answer": "tar -xzf archive.tar.gz -C downloads",
     "answerSteps": [
-      "grep -r Linux documents"
+      "tar -xzf archive.tar.gz -C downloads"
     ],
     "relatedCommands": [
-      "grep"
+      "tar"
     ]
   },
   {
-    "id": "lpic-ls-long-detail",
+    "id": "lpic-zcat-log",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Intermediário",
+    "lpicObjective": "103.3",
+    "title": "Ler log compactado (.gz) sem descompactar no disco",
+    "description": "Visualize o conteúdo do log rotacionado \"/var/log/nginx/access.log.1.gz\" diretamente no terminal sem alterá-lo.",
+    "hint": "Execute zcat /var/log/nginx/access.log.1.gz",
+    "answer": "zcat /var/log/nginx/access.log.1.gz",
+    "answerSteps": [
+      "zcat /var/log/nginx/access.log.1.gz"
+    ],
+    "relatedCommands": [
+      "zcat",
+      "gzip"
+    ]
+  },
+  {
+    "id": "lpic-umask",
     "category": "lpic",
     "categoryLabel": "LPIC-1",
     "difficulty": "Intermediário",
     "lpicObjective": "104.5",
-    "title": "Exibir metadados detalhados dos arquivos",
-    "description": "Exiba a lista completa de arquivos da pasta atual com detalhes de permissões, proprietário, grupo, tamanho e data.",
-    "hint": "Use o comando ls -l",
-    "answer": "ls -l",
+    "title": "Definir máscara padrão de permissões (umask)",
+    "description": "Configure a máscara padrão de criação de arquivos da sessão para 0027 usando umask, restringindo leitura de outros usuários em novos arquivos.",
+    "hint": "Execute umask 0027",
+    "answer": "umask 0027",
     "answerSteps": [
-      "ls -l"
+      "umask 0027"
     ],
     "relatedCommands": [
-      "ls",
-      "ln",
-      "chmod"
+      "umask",
+      "chmod",
+      "ls -l"
     ]
   },
   {
@@ -2608,6 +2680,76 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "lpic-md5sum",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Intermediário",
+    "lpicObjective": "110.1",
+    "title": "Calcular hash de verificação MD5",
+    "description": "Calcule a soma de verificação MD5 do arquivo documents/readme.txt.",
+    "hint": "Execute md5sum documents/readme.txt",
+    "answer": "md5sum documents/readme.txt",
+    "answerSteps": [
+      "md5sum documents/readme.txt"
+    ],
+    "relatedCommands": [
+      "md5sum",
+      "sha256sum"
+    ]
+  },
+  {
+    "id": "lpic-grep-recursive",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Intermediário",
+    "lpicObjective": "103.7",
+    "title": "Buscar recursivamente em diretórios",
+    "description": "Busque recursivamente no diretório documents e exiba as linhas que contêm \"Linux\".",
+    "hint": "Use o comando grep -r (exemplo: grep -r Linux documents)",
+    "answer": "grep -r Linux documents",
+    "answerSteps": [
+      "grep -r Linux documents"
+    ],
+    "relatedCommands": [
+      "grep"
+    ]
+  },
+  {
+    "id": "lpic-find-type-depth",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Intermediário",
+    "lpicObjective": "104.7",
+    "title": "Limitar profundidade e filtrar apenas arquivos com find",
+    "description": "Busque apenas arquivos comuns (-type f) a partir do diretório atual descendo no máximo 2 níveis (-maxdepth 2).",
+    "hint": "Execute find . -maxdepth 2 -type f",
+    "answer": "find . -maxdepth 2 -type f",
+    "answerSteps": [
+      "find . -maxdepth 2 -type f"
+    ],
+    "relatedCommands": [
+      "find"
+    ]
+  },
+  {
+    "id": "lpic-find-exec-cat",
+    "category": "lpic",
+    "categoryLabel": "LPIC-1",
+    "difficulty": "Intermediário",
+    "lpicObjective": "103.3",
+    "title": "Exibir o conteúdo de arquivos com find e -exec",
+    "description": "Busque os arquivos \".txt\" em documents e exiba o conteúdo de cada arquivo encontrado com cat.",
+    "hint": "Use find documents -name \"*.txt\" -exec cat {} \\;",
+    "answer": "find documents -name \"*.txt\" -exec cat {} \\;",
+    "answerSteps": [
+      "find documents -name \"*.txt\" -exec cat {} \\;"
+    ],
+    "relatedCommands": [
+      "find",
+      "cat"
+    ]
+  },
+  {
     "id": "lpic-find-exec-grep",
     "category": "lpic",
     "categoryLabel": "LPIC-1",
@@ -2642,148 +2784,6 @@ const ALL_LESSONS = [
     "relatedCommands": [
       "find",
       "tar"
-    ]
-  },
-  {
-    "id": "lpic-tar-gzip-create",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Intermediário",
-    "lpicObjective": "103.3",
-    "title": "Criar arquivo .tar.gz comprimido com gzip",
-    "description": "Empacote e comprima a pasta documents em um único arquivo \"docs.tar.gz\" usando tar com a opção -z.",
-    "hint": "Execute tar -czf docs.tar.gz documents",
-    "answer": "tar -czf docs.tar.gz documents",
-    "answerSteps": [
-      "tar -czf docs.tar.gz documents"
-    ],
-    "relatedCommands": [
-      "tar",
-      "gzip"
-    ]
-  },
-  {
-    "id": "lpic-tar-extract-dir",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Intermediário",
-    "lpicObjective": "103.3",
-    "title": "Extrair arquivo compactado em diretório específico",
-    "description": "Extraia o pacote \"archive.tar.gz\" diretamente para dentro da pasta \"downloads\" sem precisar dar cd antes.",
-    "hint": "Use a opção -C para definir o destino: tar -xzf archive.tar.gz -C downloads",
-    "answer": "tar -xzf archive.tar.gz -C downloads",
-    "answerSteps": [
-      "tar -xzf archive.tar.gz -C downloads"
-    ],
-    "relatedCommands": [
-      "tar"
-    ]
-  },
-  {
-    "id": "lpic-zcat-log",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Intermediário",
-    "lpicObjective": "103.3",
-    "title": "Ler log compactado (.gz) sem descompactar no disco",
-    "description": "Visualize o conteúdo do log rotacionado \"/var/log/nginx/access.log.1.gz\" diretamente no terminal sem alterá-lo.",
-    "hint": "Execute zcat /var/log/nginx/access.log.1.gz",
-    "answer": "zcat /var/log/nginx/access.log.1.gz",
-    "answerSteps": [
-      "zcat /var/log/nginx/access.log.1.gz"
-    ],
-    "relatedCommands": [
-      "zcat",
-      "gzip"
-    ]
-  },
-  {
-    "id": "lpic-zip-create",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Iniciante",
-    "lpicObjective": "103.3",
-    "title": "Compactar diretório no formato .zip",
-    "description": "Crie um arquivo compactado chamado \"proj.zip\" contendo recursivamente a pasta \"projects\".",
-    "hint": "Execute zip -r proj.zip projects",
-    "answer": "zip -r proj.zip projects",
-    "answerSteps": [
-      "zip -r proj.zip projects"
-    ],
-    "relatedCommands": [
-      "zip",
-      "unzip"
-    ]
-  },
-  {
-    "id": "lpic-unzip-extract",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Iniciante",
-    "lpicObjective": "103.3",
-    "title": "Extrair pacote .zip para outra pasta",
-    "description": "Descompacte o arquivo \"proj.zip\" extraindo seu conteúdo dentro da pasta \"downloads\".",
-    "hint": "Use -d para escolher o diretório de destino: unzip proj.zip -d downloads",
-    "answer": "unzip proj.zip -d downloads",
-    "answerSteps": [
-      "unzip proj.zip -d downloads"
-    ],
-    "relatedCommands": [
-      "unzip",
-      "zip"
-    ]
-  },
-  {
-    "id": "lpic-readlink",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Intermediário",
-    "lpicObjective": "104.6",
-    "title": "Descobrir o destino real de um link simbólico",
-    "description": "Verifique para qual arquivo original o link simbólico \"readme-link\" está apontando.",
-    "hint": "Execute readlink readme-link",
-    "answer": "readlink readme-link",
-    "answerSteps": [
-      "readlink readme-link"
-    ],
-    "relatedCommands": [
-      "readlink",
-      "ln"
-    ]
-  },
-  {
-    "id": "lpic-find-type-depth",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Intermediário",
-    "lpicObjective": "104.7",
-    "title": "Limitar profundidade e filtrar apenas arquivos com find",
-    "description": "Busque apenas arquivos comuns (-type f) a partir do diretório atual descendo no máximo 2 níveis (-maxdepth 2).",
-    "hint": "Execute find . -maxdepth 2 -type f",
-    "answer": "find . -maxdepth 2 -type f",
-    "answerSteps": [
-      "find . -maxdepth 2 -type f"
-    ],
-    "relatedCommands": [
-      "find"
-    ]
-  },
-  {
-    "id": "lpic-md5sum",
-    "category": "lpic",
-    "categoryLabel": "LPIC-1",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Calcular hash de verificação MD5",
-    "description": "Calcule a soma de verificação MD5 do arquivo documents/readme.txt.",
-    "hint": "Execute md5sum documents/readme.txt",
-    "answer": "md5sum documents/readme.txt",
-    "answerSteps": [
-      "md5sum documents/readme.txt"
-    ],
-    "relatedCommands": [
-      "md5sum",
-      "sha256sum"
     ]
   },
   {
@@ -2970,6 +2970,23 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "git-switch-create",
+    "category": "git",
+    "categoryLabel": "Git",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Criar e trocar para uma nova ramificação (branch)",
+    "description": "Crie uma nova ramificação (branch) chamada \"hotfix\" e já mude para ela em uma única operação.",
+    "hint": "Use git switch -c hotfix (ou git checkout -b hotfix)",
+    "answer": "git switch -c hotfix",
+    "answerSteps": [
+      "git switch -c hotfix"
+    ],
+    "relatedCommands": [
+      "git"
+    ]
+  },
+  {
     "id": "git-diff-staged",
     "category": "git",
     "categoryLabel": "Git",
@@ -3004,30 +3021,32 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "git-switch-create",
+    "id": "git-gitignore",
     "category": "git",
     "categoryLabel": "Git",
-    "difficulty": "Iniciante",
+    "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Criar e trocar para uma nova branch em um comando",
-    "description": "Crie uma nova ramificação chamada \"hotfix\" e já mude para ela em uma única operação.",
-    "hint": "Use git switch -c hotfix (ou git checkout -b hotfix)",
-    "answer": "git switch -c hotfix",
+    "title": "Ignorar arquivos sensíveis com .gitignore",
+    "description": "Adicione \".env\" ao arquivo .gitignore para impedir que segredos apareçam como não rastreados e confirme o resultado com git status.",
+    "hint": "Execute echo \".env\" > .gitignore && git status",
+    "answer": "echo \".env\" > .gitignore && git status",
     "answerSteps": [
-      "git switch -c hotfix"
+      "echo \".env\" > .gitignore",
+      "git status"
     ],
     "relatedCommands": [
-      "git"
+      "git",
+      "git status"
     ]
   },
   {
     "id": "git-merge",
     "category": "git",
     "categoryLabel": "Git",
-    "difficulty": "Intermediário",
+    "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Mesclar alterações de outra ramificação",
-    "description": "Você está na branch \"main\". Traga os commits da branch \"feature\" para a branch atual usando merge.",
+    "description": "Você está na ramificação (branch) \"main\". Traga os commits da ramificação \"feature\" para a atual usando merge.",
     "hint": "Execute git merge feature",
     "answer": "git merge feature",
     "answerSteps": [
@@ -3041,7 +3060,7 @@ const ALL_LESSONS = [
     "id": "git-branch-delete",
     "category": "git",
     "categoryLabel": "Git",
-    "difficulty": "Intermediário",
+    "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Excluir uma ramificação após finalizar o trabalho",
     "description": "Exclua a ramificação \"feature\" que não é mais necessária.",
@@ -3199,6 +3218,23 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "docker-start",
+    "category": "docker",
+    "categoryLabel": "Docker",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Reiniciar um contêiner que estava parado",
+    "description": "O contêiner \"web\" foi interrompido anteriormente (Exited). Inicie-o novamente sem criar um novo contêiner.",
+    "hint": "Execute docker start web",
+    "answer": "docker start web",
+    "answerSteps": [
+      "docker start web"
+    ],
+    "relatedCommands": [
+      "docker"
+    ]
+  },
+  {
     "id": "docker-rm",
     "category": "docker",
     "categoryLabel": "Docker",
@@ -3283,23 +3319,6 @@ const ALL_LESSONS = [
     "answer": "docker exec -it web2 uname -a",
     "answerSteps": [
       "docker exec -it web2 uname -a"
-    ],
-    "relatedCommands": [
-      "docker"
-    ]
-  },
-  {
-    "id": "docker-start",
-    "category": "docker",
-    "categoryLabel": "Docker",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Reiniciar um contêiner que estava parado",
-    "description": "O contêiner \"web\" foi interrompido anteriormente (Exited). Inicie-o novamente sem criar um novo contêiner.",
-    "hint": "Execute docker start web",
-    "answer": "docker start web",
-    "answerSteps": [
-      "docker start web"
     ],
     "relatedCommands": [
       "docker"
@@ -3437,6 +3456,24 @@ const ALL_LESSONS = [
     ]
   },
   {
+    "id": "bash-history-list",
+    "category": "scripting",
+    "categoryLabel": "Scripts",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Listar histórico numerado de comandos",
+    "description": "Exiba a lista de comandos digitados recentemente nesta sessão do shell.",
+    "hint": "Execute history",
+    "answer": "history",
+    "answerSteps": [
+      "history"
+    ],
+    "relatedCommands": [
+      "history",
+      "!!"
+    ]
+  },
+  {
     "id": "bash-history-exec",
     "category": "scripting",
     "categoryLabel": "Scripts",
@@ -3454,6 +3491,24 @@ const ALL_LESSONS = [
       "!n",
       "history",
       "Ctrl+R"
+    ]
+  },
+  {
+    "id": "bash-export-env",
+    "category": "scripting",
+    "categoryLabel": "Scripts",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Exportar uma variável de ambiente",
+    "description": "Crie e exporte a variável de ambiente GYM_ENV com o valor \"production\" para que processos filhos a enxerguem.",
+    "hint": "Execute export GYM_ENV=production",
+    "answer": "export GYM_ENV=production",
+    "answerSteps": [
+      "export GYM_ENV=production"
+    ],
+    "relatedCommands": [
+      "export",
+      "env"
     ]
   },
   {
@@ -3577,66 +3632,6 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "bash-run-script",
-    "category": "scripting",
-    "categoryLabel": "Scripts",
-    "difficulty": "Intermediário",
-    "lpicObjective": "105.1",
-    "title": "Executar arquivo de script de comandos",
-    "description": "Execute todas as instruções contidas no arquivo 'script.sh' através do interpretador shell.",
-    "hint": "Execute bash script.sh ou ./script.sh",
-    "answer": "bash script.sh",
-    "answerSteps": [
-      "bash script.sh"
-    ],
-    "relatedCommands": [
-      "bash",
-      "sh",
-      "source",
-      "./script.sh"
-    ]
-  },
-  {
-    "id": "bash-loop-for",
-    "category": "scripting",
-    "categoryLabel": "Scripts",
-    "difficulty": "Avançado",
-    "lpicObjective": "105.2",
-    "title": "Criar múltiplos arquivos com laço de repetição",
-    "description": "Crie em um único comando os arquivos 'log_1.txt', 'log_2.txt' e 'log_3.txt' utilizando um laço for no terminal.",
-    "hint": "Execute for i in 1 2 3; do touch \"log_$i.txt\"; done",
-    "answer": "for i in 1 2 3; do touch \"log_$i.txt\"; done",
-    "answerSteps": [
-      "for i in 1 2 3; do touch \"log_$i.txt\"; done"
-    ],
-    "relatedCommands": [
-      "for",
-      "while",
-      "until",
-      "seq"
-    ]
-  },
-  {
-    "id": "bash-test-condition",
-    "category": "scripting",
-    "categoryLabel": "Scripts",
-    "difficulty": "Avançado",
-    "lpicObjective": "105.2",
-    "title": "Testar existência de arquivo com condicional",
-    "description": "Escreva uma estrutura condicional no terminal que verifique se o arquivo 'documents/readme.txt' existe e imprima \"Existe\" em caso positivo.",
-    "hint": "Execute if [ -f documents/readme.txt ]; then echo \"Existe\"; fi",
-    "answer": "if [ -f documents/readme.txt ]; then echo \"Existe\"; fi",
-    "answerSteps": [
-      "if [ -f documents/readme.txt ]; then echo \"Existe\"; fi"
-    ],
-    "relatedCommands": [
-      "if",
-      "test",
-      "[",
-      "[["
-    ]
-  },
-  {
     "id": "bash-popd",
     "category": "scripting",
     "categoryLabel": "Scripts",
@@ -3656,24 +3651,6 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "bash-export-env",
-    "category": "scripting",
-    "categoryLabel": "Scripts",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Exportar uma variável de ambiente",
-    "description": "Crie e exporte a variável de ambiente GYM_ENV com o valor \"production\" para que processos filhos a enxerguem.",
-    "hint": "Execute export GYM_ENV=production",
-    "answer": "export GYM_ENV=production",
-    "answerSteps": [
-      "export GYM_ENV=production"
-    ],
-    "relatedCommands": [
-      "export",
-      "env"
-    ]
-  },
-  {
     "id": "bash-source-bashrc",
     "category": "scripting",
     "categoryLabel": "Scripts",
@@ -3688,6 +3665,26 @@ const ALL_LESSONS = [
     ],
     "relatedCommands": [
       "source"
+    ]
+  },
+  {
+    "id": "bash-run-script",
+    "category": "scripting",
+    "categoryLabel": "Scripts",
+    "difficulty": "Intermediário",
+    "lpicObjective": "105.1",
+    "title": "Executar arquivo de script de comandos",
+    "description": "Execute todas as instruções contidas no arquivo 'script.sh' através do interpretador shell.",
+    "hint": "Execute bash script.sh ou ./script.sh",
+    "answer": "bash script.sh",
+    "answerSteps": [
+      "bash script.sh"
+    ],
+    "relatedCommands": [
+      "bash",
+      "sh",
+      "source",
+      "./script.sh"
     ]
   },
   {
@@ -3762,21 +3759,43 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "bash-history-list",
+    "id": "bash-loop-for",
     "category": "scripting",
     "categoryLabel": "Scripts",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Listar histórico numerado de comandos",
-    "description": "Exiba a lista de comandos digitados recentemente nesta sessão do shell.",
-    "hint": "Execute history",
-    "answer": "history",
+    "difficulty": "Avançado",
+    "lpicObjective": "105.2",
+    "title": "Criar múltiplos arquivos com laço de repetição",
+    "description": "Crie em um único comando os arquivos 'log_1.txt', 'log_2.txt' e 'log_3.txt' utilizando um laço for no terminal.",
+    "hint": "Execute for i in 1 2 3; do touch \"log_$i.txt\"; done",
+    "answer": "for i in 1 2 3; do touch \"log_$i.txt\"; done",
     "answerSteps": [
-      "history"
+      "for i in 1 2 3; do touch \"log_$i.txt\"; done"
     ],
     "relatedCommands": [
-      "history",
-      "!!"
+      "for",
+      "while",
+      "until",
+      "seq"
+    ]
+  },
+  {
+    "id": "bash-test-condition",
+    "category": "scripting",
+    "categoryLabel": "Scripts",
+    "difficulty": "Avançado",
+    "lpicObjective": "105.2",
+    "title": "Testar existência de arquivo com condicional",
+    "description": "Escreva uma estrutura condicional no terminal que verifique se o arquivo 'documents/readme.txt' existe e imprima \"Existe\" em caso positivo.",
+    "hint": "Execute if [ -f documents/readme.txt ]; then echo \"Existe\"; fi",
+    "answer": "if [ -f documents/readme.txt ]; then echo \"Existe\"; fi",
+    "answerSteps": [
+      "if [ -f documents/readme.txt ]; then echo \"Existe\"; fi"
+    ],
+    "relatedCommands": [
+      "if",
+      "test",
+      "[",
+      "[["
     ]
   },
   {
@@ -3816,6 +3835,24 @@ const ALL_LESSONS = [
       "ping",
       "ping -c",
       "traceroute"
+    ]
+  },
+  {
+    "id": "net-etc-hosts",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Inspecionar resolução local de nomes (/etc/hosts)",
+    "description": "Consulte o arquivo de mapeamento estático local de IPs e hostnames do sistema.",
+    "hint": "Execute cat /etc/hosts",
+    "answer": "cat /etc/hosts",
+    "answerSteps": [
+      "cat /etc/hosts"
+    ],
+    "relatedCommands": [
+      "cat",
+      "dig"
     ]
   },
   {
@@ -4077,132 +4114,6 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "net-ufw-status",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Intermediário",
-    "lpicObjective": "110.1",
-    "title": "Verificar estado do firewall do sistema",
-    "description": "Exiba as regras de segurança ativas e o status de proteção do firewall local.",
-    "hint": "Execute sudo ufw status",
-    "answer": "sudo ufw status",
-    "answerSteps": [
-      "sudo ufw status"
-    ],
-    "relatedCommands": [
-      "sudo ufw status",
-      "ufw status",
-      "iptables",
-      "nftables"
-    ]
-  },
-  {
-    "id": "net-ufw-enable",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Intermediário",
-    "lpicObjective": "110.1",
-    "title": "Ativar o firewall do sistema",
-    "description": "Habilite o firewall para proteger o sistema e bloquear tráfego de entrada não autorizado.",
-    "hint": "Execute sudo ufw enable",
-    "answer": "sudo ufw enable",
-    "answerSteps": [
-      "sudo ufw enable"
-    ],
-    "relatedCommands": [
-      "sudo ufw enable",
-      "sudo ufw disable",
-      "sudo ufw status"
-    ]
-  },
-  {
-    "id": "net-ufw-allow",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Avançado",
-    "lpicObjective": "110.1",
-    "title": "Liberar porta de tráfego web no firewall",
-    "description": "Crie uma regra no firewall permitindo a entrada de conexões na porta 80 via protocolo TCP.",
-    "hint": "Execute sudo ufw allow 80/tcp",
-    "answer": "sudo ufw allow 80/tcp",
-    "answerSteps": [
-      "sudo ufw allow 80/tcp"
-    ],
-    "relatedCommands": [
-      "sudo ufw allow",
-      "sudo ufw allow 80/tcp",
-      "sudo ufw delete allow"
-    ]
-  },
-  {
-    "id": "net-ufw-deny",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Bloquear porta insegura no firewall (ufw deny)",
-    "description": "Bloqueie explicitamente o tráfego de entrada na porta 23/tcp (Telnet) no firewall UFW.",
-    "hint": "Execute sudo ufw deny 23/tcp",
-    "answer": "sudo ufw deny 23/tcp",
-    "answerSteps": [
-      "sudo ufw deny 23/tcp"
-    ],
-    "relatedCommands": [
-      "ufw"
-    ]
-  },
-  {
-    "id": "net-ufw-delete",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Remover uma regra existente do firewall",
-    "description": "Exclua a regra que liberava a porta 80/tcp no firewall UFW.",
-    "hint": "Execute sudo ufw delete allow 80/tcp",
-    "answer": "sudo ufw delete allow 80/tcp",
-    "answerSteps": [
-      "sudo ufw delete allow 80/tcp"
-    ],
-    "relatedCommands": [
-      "ufw"
-    ]
-  },
-  {
-    "id": "net-ufw-disable",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Desativar temporariamente o firewall",
-    "description": "Desabilite o firewall UFW do sistema.",
-    "hint": "Execute sudo ufw disable",
-    "answer": "sudo ufw disable",
-    "answerSteps": [
-      "sudo ufw disable"
-    ],
-    "relatedCommands": [
-      "ufw"
-    ]
-  },
-  {
-    "id": "net-curl-post",
-    "category": "networking",
-    "categoryLabel": "Redes",
-    "difficulty": "Avançado",
-    "lpicObjective": null,
-    "title": "Enviar dados JSON via POST com curl",
-    "description": "Envie uma requisição HTTP POST para \"http://localhost/api/members\" com cabeçalho JSON e corpo '{\"name\":\"Tux\"}'.",
-    "hint": "Execute curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"Tux\"}' http://localhost/api/members",
-    "answer": "curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"Tux\"}' http://localhost/api/members",
-    "answerSteps": [
-      "curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"Tux\"}' http://localhost/api/members"
-    ],
-    "relatedCommands": [
-      "curl"
-    ]
-  },
-  {
     "id": "net-nmap-scan",
     "category": "networking",
     "categoryLabel": "Redes",
@@ -4257,21 +4168,147 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "net-etc-hosts",
+    "id": "net-ufw-status",
     "category": "networking",
     "categoryLabel": "Redes",
-    "difficulty": "Iniciante",
-    "lpicObjective": null,
-    "title": "Inspecionar resolução local de nomes (/etc/hosts)",
-    "description": "Consulte o arquivo de mapeamento estático local de IPs e hostnames do sistema.",
-    "hint": "Execute cat /etc/hosts",
-    "answer": "cat /etc/hosts",
+    "difficulty": "Intermediário",
+    "lpicObjective": "110.1",
+    "title": "Verificar estado do firewall do sistema",
+    "description": "Exiba as regras de segurança ativas e o status de proteção do firewall local.",
+    "hint": "Execute sudo ufw status",
+    "answer": "sudo ufw status",
     "answerSteps": [
-      "cat /etc/hosts"
+      "sudo ufw status"
     ],
     "relatedCommands": [
-      "cat",
-      "dig"
+      "sudo ufw status",
+      "ufw status",
+      "iptables",
+      "nftables"
+    ]
+  },
+  {
+    "id": "net-ufw-enable",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Intermediário",
+    "lpicObjective": "110.1",
+    "title": "Ativar o firewall do sistema",
+    "description": "Habilite o firewall para proteger o sistema e bloquear tráfego de entrada não autorizado.",
+    "hint": "Execute sudo ufw enable",
+    "answer": "sudo ufw enable",
+    "answerSteps": [
+      "sudo ufw enable"
+    ],
+    "relatedCommands": [
+      "sudo ufw enable",
+      "sudo ufw disable",
+      "sudo ufw status"
+    ]
+  },
+  {
+    "id": "net-ufw-allow",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Intermediário",
+    "lpicObjective": "110.1",
+    "title": "Liberar porta de tráfego web no firewall",
+    "description": "Crie uma regra no firewall permitindo a entrada de conexões na porta 80 via protocolo TCP.",
+    "hint": "Execute sudo ufw allow 80/tcp",
+    "answer": "sudo ufw allow 80/tcp",
+    "answerSteps": [
+      "sudo ufw allow 80/tcp"
+    ],
+    "relatedCommands": [
+      "sudo ufw allow",
+      "sudo ufw allow 80/tcp",
+      "sudo ufw delete allow"
+    ]
+  },
+  {
+    "id": "net-ufw-deny",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Bloquear porta insegura no firewall (ufw deny)",
+    "description": "Bloqueie explicitamente o tráfego de entrada na porta 23/tcp (Telnet) no firewall UFW.",
+    "hint": "Execute sudo ufw deny 23/tcp",
+    "answer": "sudo ufw deny 23/tcp",
+    "answerSteps": [
+      "sudo ufw deny 23/tcp"
+    ],
+    "relatedCommands": [
+      "ufw"
+    ]
+  },
+  {
+    "id": "net-ufw-delete",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Remover uma regra existente do firewall",
+    "description": "Exclua a regra que liberava a porta 80/tcp no firewall UFW.",
+    "hint": "Execute sudo ufw delete allow 80/tcp",
+    "answer": "sudo ufw delete allow 80/tcp",
+    "answerSteps": [
+      "sudo ufw delete allow 80/tcp"
+    ],
+    "relatedCommands": [
+      "ufw"
+    ]
+  },
+  {
+    "id": "net-ufw-disable",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Desativar temporariamente o firewall",
+    "description": "Desabilite o firewall UFW do sistema.",
+    "hint": "Execute sudo ufw disable",
+    "answer": "sudo ufw disable",
+    "answerSteps": [
+      "sudo ufw disable"
+    ],
+    "relatedCommands": [
+      "ufw"
+    ]
+  },
+  {
+    "id": "net-curl-post",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Enviar dados JSON via POST com curl",
+    "description": "Envie uma requisição HTTP POST para \"http://localhost/api/members\" com cabeçalho JSON e corpo '{\"name\":\"Tux\"}'.",
+    "hint": "Execute curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"Tux\"}' http://localhost/api/members",
+    "answer": "curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"Tux\"}' http://localhost/api/members",
+    "answerSteps": [
+      "curl -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"Tux\"}' http://localhost/api/members"
+    ],
+    "relatedCommands": [
+      "curl"
+    ]
+  },
+  {
+    "id": "net-curl-jq",
+    "category": "networking",
+    "categoryLabel": "Redes",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Consultar API JSON com curl e formatar com jq",
+    "description": "Faça uma requisição GET em http://localhost/api/data usando curl e passe a resposta JSON diretamente via pipe para o jq formatar.",
+    "hint": "Execute curl -s http://localhost/api/data | jq .",
+    "answer": "curl -s http://localhost/api/data | jq .",
+    "answerSteps": [
+      "curl -s http://localhost/api/data | jq ."
+    ],
+    "relatedCommands": [
+      "curl",
+      "jq"
     ]
   },
   {
@@ -4353,7 +4390,7 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Ordenar e mostrar só as primeiras linhas",
-    "description": "Mostre o `name` e a `age` dos 3 membros mais velhos, da maior `age` para a menor (empates em ordem de `name`), com ORDER BY e LIMIT. No Linux: sort -rn | head -3.",
+    "description": "Mostre o `name` e a `age` dos 3 membros mais velhos, da maior `age` para a menor (empates em ordem de `name`), com ORDER BY e LIMIT. No Linux (usando members.csv): sort -t, -k5 -rn | head -3.",
     "hint": "Execute `sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\"`. DESC significa do maior para o menor",
     "answer": "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\"",
     "answerSteps": [
@@ -4366,42 +4403,20 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "db-group-count",
+    "id": "db-like-search",
     "category": "database",
     "categoryLabel": "SQL",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Contar por grupo",
-    "description": "Conte os membros de cada `city` com GROUP BY. No Linux, isso equivale a `cut -d , -f 4 members.csv | sort | uniq -c`. Execute também: as contagens batem, mas sobra uma linha.",
-    "hint": "Execute `sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"`. A linha extra `1 city` na saída do uniq -c vem da linha de cabeçalho do CSV",
-    "answer": "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"",
+    "title": "Filtrar por padrão de texto com LIKE",
+    "description": "Consulte em gym.db o nome dos membros cujo email termina com '@example.com' usando o operador LIKE.",
+    "hint": "Execute sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
+    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
     "answerSteps": [
-      "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\""
+      "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\""
     ],
     "relatedCommands": [
-      "sqlite3",
-      "cut",
-      "sort",
-      "uniq"
-    ]
-  },
-  {
-    "id": "db-pipe",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Processar saída de consulta SQL através de filtros shell",
-    "description": "Exporte a lista de cidades dos membros em formato CSV e ordene/totalize as ocorrências utilizando pipes do Linux.",
-    "hint": "Execute `sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c`. Sem o sort, o uniq só junta linhas iguais que estão uma ao lado da outra. As contagens batem com o resultado do GROUP BY do desafio anterior",
-    "answer": "sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c",
-    "answerSteps": [
-      "sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c"
-    ],
-    "relatedCommands": [
-      "sqlite3",
-      "sort",
-      "uniq"
+      "sqlite3"
     ]
   },
   {
@@ -4434,6 +4449,147 @@ const ALL_LESSONS = [
     "answer": "sqlite3 gym.db \"SELECT COUNT(*) FROM members WHERE age >= 20;\"",
     "answerSteps": [
       "sqlite3 gym.db \"SELECT COUNT(*) FROM members WHERE age >= 20;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-between",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Filtrar faixa numérica com BETWEEN",
+    "description": "No banco gym.db, selecione `name` e `age` dos membros cuja idade esteja entre 20 e 30 anos (inclusive) utilizando o operador BETWEEN.",
+    "hint": "Execute sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\"",
+    "answer": "sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-group-count",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Contar por grupo",
+    "description": "Conte os membros de cada `city` com GROUP BY. No Linux, isso equivale a `cut -d , -f 4 members.csv | sort | uniq -c`. Execute também: as contagens batem, mas sobra uma linha.",
+    "hint": "Execute `sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"`. A linha extra `1 city` na saída do uniq -c vem da linha de cabeçalho do CSV",
+    "answer": "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "cut",
+      "sort",
+      "uniq"
+    ]
+  },
+  {
+    "id": "db-sum-avg",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Calcular média numérica com AVG",
+    "description": "No banco gym_legacy.db, calcule a média de valor (monthly_fee) da tabela plans usando AVG().",
+    "hint": "Execute sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
+    "answer": "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
+    "answerSteps": [
+      "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-pipe",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Processar saída de consulta SQL através de filtros shell",
+    "description": "Exporte a lista de cidades dos membros em formato CSV e ordene/totalize as ocorrências utilizando pipes do Linux.",
+    "hint": "Execute `sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c`. Sem o sort, o uniq só junta linhas iguais que estão uma ao lado da outra. As contagens batem com o resultado do GROUP BY do desafio anterior",
+    "answer": "sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c",
+    "answerSteps": [
+      "sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c"
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "sort",
+      "uniq"
+    ]
+  },
+  {
+    "id": "db-create-table",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Criar uma nova tabela no SQLite",
+    "description": "No banco gym.db, crie uma nova tabela chamada \"workouts\" com as colunas \"id INTEGER PRIMARY KEY\" e \"title TEXT\" e observe-a aparecer no Painel SQL.",
+    "hint": "Execute sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"",
+    "answer": "sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-insert-into",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Inserir novo membro na tabela (INSERT INTO)",
+    "description": "Matricule o novo aluno 'Tux' (id 13, email 'tux@example.com', cidade 'Tokyo', idade 25) na tabela members de gym.db.",
+    "hint": "Execute sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"",
+    "answer": "sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-update-where",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Atualizar registro específico no banco",
+    "description": "No banco gym_legacy.db, atualize a cidade do aluno de código (id) 3 para \"Osaka\", modificando estritamente essa linha.",
+    "hint": "Primeiro execute `sqlite3 gym_legacy.db \"SELECT COUNT(*) FROM members WHERE id = 3;\"` para confirmar 1 linha e depois `sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"`. Sem WHERE, a city de todos os membros muda",
+    "answer": "sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"",
+    "answerSteps": [
+      "sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-delete-where",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Excluir registro específico com DELETE WHERE",
+    "description": "No banco gym_legacy.db, remova exclusivamente o membro de id = 10 (Leo) da tabela members.",
+    "hint": "Execute sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\"",
+    "answer": "sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\"",
+    "answerSteps": [
+      "sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\""
     ],
     "relatedCommands": [
       "sqlite3"
@@ -4474,102 +4630,17 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "db-update-where",
+    "id": "db-having",
     "category": "database",
     "categoryLabel": "SQL",
     "difficulty": "Avançado",
     "lpicObjective": null,
-    "title": "Atualizar registro específico no banco",
-    "description": "No banco gym_legacy.db, atualize a cidade do aluno de código (id) 3 para \"Osaka\", modificando estritamente essa linha.",
-    "hint": "Primeiro execute `sqlite3 gym_legacy.db \"SELECT COUNT(*) FROM members WHERE id = 3;\"` para confirmar 1 linha e depois `sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"`. Sem WHERE, a city de todos os membros muda",
-    "answer": "sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"",
+    "title": "Filtrar grupos agregados com HAVING",
+    "description": "No banco gym.db, conte os membros por cidade (GROUP BY city) exibindo somente as cidades com mais de 2 membros usando HAVING COUNT(*) > 2.",
+    "hint": "Execute sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\"",
+    "answer": "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\"",
     "answerSteps": [
-      "sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\""
-    ],
-    "relatedCommands": [
-      "sqlite3"
-    ]
-  },
-  {
-    "id": "db-create-table",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Criar uma nova tabela no SQLite",
-    "description": "No banco gym.db, crie uma nova tabela chamada \"workouts\" com as colunas \"id INTEGER PRIMARY KEY\" e \"title TEXT\" e observe-a aparecer no Painel SQL.",
-    "hint": "Execute sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"",
-    "answer": "sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"",
-    "answerSteps": [
-      "sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\""
-    ],
-    "relatedCommands": [
-      "sqlite3"
-    ]
-  },
-  {
-    "id": "db-insert-into",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Inserir novo membro na tabela (INSERT INTO)",
-    "description": "Matricule o novo aluno 'Tux' (id 13, email 'tux@example.com', cidade 'Tokyo', idade 25) na tabela members de gym.db.",
-    "hint": "Execute sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"",
-    "answer": "sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"",
-    "answerSteps": [
-      "sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\""
-    ],
-    "relatedCommands": [
-      "sqlite3"
-    ]
-  },
-  {
-    "id": "db-delete-where",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Avançado",
-    "lpicObjective": null,
-    "title": "Excluir registro específico com DELETE WHERE",
-    "description": "No banco gym_legacy.db, remova exclusivamente o membro de id = 11 da tabela members.",
-    "hint": "Execute sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 11;\"",
-    "answer": "sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 11;\"",
-    "answerSteps": [
-      "sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 11;\""
-    ],
-    "relatedCommands": [
-      "sqlite3"
-    ]
-  },
-  {
-    "id": "db-like-search",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Filtrar por padrão de texto com LIKE",
-    "description": "Consulte em gym.db o nome dos membros cujo email termina com '@example.com' usando o operador LIKE.",
-    "hint": "Execute sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
-    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
-    "answerSteps": [
-      "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\""
-    ],
-    "relatedCommands": [
-      "sqlite3"
-    ]
-  },
-  {
-    "id": "db-sum-avg",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Calcular média numérica com AVG",
-    "description": "No banco gym_legacy.db, calcule a média de valor (monthly_fee) da tabela plans usando AVG().",
-    "hint": "Execute sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
-    "answer": "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
-    "answerSteps": [
-      "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\""
+      "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\""
     ],
     "relatedCommands": [
       "sqlite3"
@@ -4672,6 +4743,25 @@ const ALL_LESSONS = [
       "sqlite3",
       "gzip",
       "sha256sum"
+    ]
+  },
+  {
+    "id": "inc-script-perm-fix",
+    "category": "incidents",
+    "categoryLabel": "Incidentes",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "🚨 Incidente #6: Script de deploy sem permissão de execução",
+    "description": "Um colega deixou o script \"/home/user/deploy.sh\" pronto, mas a execução direta falha com \"Permissão negada\". Adicione permissão de execução (+x) e rode ./deploy.sh.",
+    "hint": "Execute chmod +x deploy.sh && ./deploy.sh",
+    "answer": "chmod +x deploy.sh && ./deploy.sh",
+    "answerSteps": [
+      "chmod +x deploy.sh",
+      "./deploy.sh"
+    ],
+    "relatedCommands": [
+      "ls -l",
+      "chmod"
     ]
   }
 ];

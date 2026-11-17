@@ -38,6 +38,18 @@ class TerminalUI {
     const termArea = document.getElementById('terminalArea');
     if (termArea) {
       termArea.addEventListener('click', (e) => {
+        if (document.getElementById('nanoEditorOverlay')) {
+          if (!e.target.closest('button')) {
+            document.getElementById('nanoTextarea')?.focus();
+          }
+          return;
+        }
+        if (document.getElementById('lessPagerOverlay')) {
+          if (!e.target.closest('button')) {
+            document.getElementById('lessPagerOverlay')?.focus();
+          }
+          return;
+        }
         if (e.target.closest('button')) return;
         if (this.inputElement) this.inputElement.focus();
       });
@@ -60,7 +72,9 @@ class TerminalUI {
       this.enterBtn.addEventListener('click', (e) => {
         e.preventDefault();
         this.submitCurrentInput();
-        if (this.inputElement) this.inputElement.focus();
+        if (this.inputElement && !document.getElementById('nanoEditorOverlay') && !document.getElementById('lessPagerOverlay')) {
+          this.inputElement.focus();
+        }
       });
     }
   }
@@ -81,7 +95,9 @@ class TerminalUI {
     this.historyIndex = -1;
     this.executeCommand(cmdLine);
     this.hideChips();
-    if (this.inputElement) this.inputElement.focus();
+    if (this.inputElement && !document.getElementById('nanoEditorOverlay') && !document.getElementById('lessPagerOverlay')) {
+      this.inputElement.focus();
+    }
   }
 
   /**
@@ -89,6 +105,10 @@ class TerminalUI {
    * e opcionalmente restaura a sessão de usuário padrão
    */
   resetInteractiveState(resetUserSession = false) {
+    if (this._nanoKeyCleanup) {
+      this._nanoKeyCleanup();
+      this._nanoKeyCleanup = null;
+    }
     if (typeof document !== 'undefined') {
       const nanoOverlay = document.getElementById('nanoEditorOverlay');
       if (nanoOverlay) nanoOverlay.remove();
@@ -556,6 +576,11 @@ class TerminalUI {
     const termArea = document.getElementById('terminalArea');
     if (!termArea) return;
 
+    if (this._nanoKeyCleanup) {
+      this._nanoKeyCleanup();
+      this._nanoKeyCleanup = null;
+    }
+
     const existing = document.getElementById('nanoEditorOverlay');
     if (existing) existing.remove();
 
@@ -567,11 +592,14 @@ class TerminalUI {
       }
     } catch {}
 
+    let lastSavedContent = initialContent;
+    let confirmingExit = false;
     const lineCount = initialContent ? initialContent.split('\n').length : 0;
 
     const overlay = document.createElement('div');
     overlay.id = 'nanoEditorOverlay';
     overlay.className = 'nano-overlay';
+    overlay.tabIndex = -1;
     overlay.innerHTML = `
       <div class="nano-header">
         <span>  GNU nano 7.2</span>
@@ -579,37 +607,67 @@ class TerminalUI {
         <span class="nano-modified" id="nanoModifiedIndicator"></span>
       </div>
       <textarea id="nanoTextarea" class="nano-textarea" spellcheck="false" placeholder="Digite o conteúdo do arquivo aqui..."></textarea>
-      <div class="nano-status-bar">
+      <div class="nano-status-bar" id="nanoStatusBar">
         <span id="nanoStatusMsg">[ Lidas ${lineCount} linhas ]</span>
       </div>
-      <div class="nano-footer">
+      <div class="nano-footer" id="nanoFooterNormal">
         <button type="button" class="nano-shortcut" id="nanoSaveBtn"><span class="nano-key">^O</span> Gravar</button>
         <button type="button" class="nano-shortcut" id="nanoExitBtn"><span class="nano-key">^X</span> Sair</button>
         <button type="button" class="nano-shortcut" id="nanoHelpBtn"><span class="nano-key">^G</span> Ajuda</button>
         <button type="button" class="nano-shortcut" id="nanoCutBtn"><span class="nano-key">^K</span> Recortar Linha</button>
+      </div>
+      <div class="nano-footer d-none" id="nanoFooterConfirm">
+        <button type="button" class="nano-shortcut" id="nanoConfirmYesBtn"><span class="nano-key"> S </span> Sim</button>
+        <button type="button" class="nano-shortcut" id="nanoConfirmNoBtn"><span class="nano-key"> N </span> Não</button>
+        <button type="button" class="nano-shortcut" id="nanoConfirmCancelBtn"><span class="nano-key">^C</span> Cancelar</button>
+        <span></span>
       </div>
     `;
 
     termArea.appendChild(overlay);
 
     const textarea = overlay.querySelector('#nanoTextarea');
+    const statusBar = overlay.querySelector('#nanoStatusBar');
     const statusMsg = overlay.querySelector('#nanoStatusMsg');
     const modIndicator = overlay.querySelector('#nanoModifiedIndicator');
+    const footerNormal = overlay.querySelector('#nanoFooterNormal');
+    const footerConfirm = overlay.querySelector('#nanoFooterConfirm');
     const saveBtn = overlay.querySelector('#nanoSaveBtn');
     const exitBtn = overlay.querySelector('#nanoExitBtn');
     const helpBtn = overlay.querySelector('#nanoHelpBtn');
     const cutBtn = overlay.querySelector('#nanoCutBtn');
+    const confirmYesBtn = overlay.querySelector('#nanoConfirmYesBtn');
+    const confirmNoBtn = overlay.querySelector('#nanoConfirmNoBtn');
+    const confirmCancelBtn = overlay.querySelector('#nanoConfirmCancelBtn');
 
     textarea.value = initialContent;
-    textarea.focus();
+
+    const updateModified = () => {
+      modIndicator.textContent = textarea.value !== lastSavedContent ? 'Modificado' : '';
+    };
+
+    const setConfirmPrompt = (active) => {
+      confirmingExit = active;
+      if (statusBar) statusBar.classList.toggle('nano-prompt', active);
+      if (footerNormal) footerNormal.classList.toggle('d-none', active);
+      if (footerConfirm) footerConfirm.classList.toggle('d-none', !active);
+      if (active) {
+        statusMsg.textContent = 'Salvar buffer modificado? (Resp. "Não" descartará as alterações)';
+        overlay.focus();
+      } else {
+        textarea.focus();
+      }
+    };
 
     const saveFile = () => {
       try {
         this.fs.writeFile(filePath, textarea.value);
+        lastSavedContent = textarea.value;
         if (crontabMode && this.commandEngine) {
           this.commandEngine.userCrontab = textarea.value;
         }
-        const lines = textarea.value.split('\n').length;
+        const lines = textarea.value === '' ? 0 : textarea.value.split('\n').length;
+        statusBar?.classList.remove('nano-prompt');
         statusMsg.textContent = crontabMode
           ? `[ Crontab instalado (${lines} linhas) ]`
           : `[ Gravadas ${lines} linhas em ${filePath} ]`;
@@ -622,52 +680,156 @@ class TerminalUI {
             crontabMode
           });
         }
+        return true;
       } catch (err) {
+        statusBar?.classList.remove('nano-prompt');
         statusMsg.textContent = `[ Erro ao gravar: ${err.message} ]`;
+        return false;
       }
     };
 
     const closeNano = () => {
+      if (this._nanoKeyCleanup) {
+        this._nanoKeyCleanup();
+        this._nanoKeyCleanup = null;
+      }
       overlay.remove();
       if (this.inputElement) this.inputElement.focus();
     };
 
-    textarea.addEventListener('input', () => {
-      modIndicator.textContent = 'Modificado';
-    });
-
-    textarea.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && (e.key.toLowerCase() === 'o' || e.key.toLowerCase() === 's')) {
-        e.preventDefault();
-        saveFile();
-      } else if ((e.ctrlKey && e.key.toLowerCase() === 'x') || e.key === 'Escape') {
-        e.preventDefault();
+    const requestExit = () => {
+      if (textarea.value !== lastSavedContent) {
+        setConfirmPrompt(true);
+      } else {
         closeNano();
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        const start = textarea.selectionStart;
-        const val = textarea.value;
-        const lineStart = val.lastIndexOf('\n', start - 1) + 1;
-        const lineEnd = val.indexOf('\n', start);
-        textarea.value = lineEnd === -1 ? val.slice(0, lineStart) : val.slice(0, lineStart) + val.slice(lineEnd + 1);
-        textarea.setSelectionRange(lineStart, lineStart);
-        statusMsg.textContent = '[ Linha recortada ]';
       }
-    });
+    };
+
+    const cutLine = () => {
+      const start = textarea.selectionStart ?? 0;
+      const val = textarea.value;
+      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = val.indexOf('\n', start);
+      textarea.value = lineEnd === -1 ? val.slice(0, lineStart) : val.slice(0, lineStart) + val.slice(lineEnd + 1);
+      if (typeof textarea.setSelectionRange === 'function') {
+        textarea.setSelectionRange(lineStart, lineStart);
+      }
+      updateModified();
+      statusBar?.classList.remove('nano-prompt');
+      statusMsg.textContent = '[ Linha recortada ]';
+    };
+
+    const onNanoKeyDown = (e) => {
+      if (!overlay.isConnected && !document.getElementById('nanoEditorOverlay')) {
+        if (this._nanoKeyCleanup) {
+          this._nanoKeyCleanup();
+          this._nanoKeyCleanup = null;
+        }
+        return;
+      }
+
+      const key = (e.key || '').toLowerCase();
+      const code = e.code || '';
+
+      if (confirmingExit) {
+        if (key === 's' || key === 'y' || e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (saveFile()) closeNano();
+        } else if (key === 'n') {
+          e.preventDefault();
+          e.stopPropagation();
+          closeNano();
+        } else if ((e.ctrlKey && (key === 'c' || code === 'KeyC')) || e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          statusMsg.textContent = '[ Cancelado ]';
+          setConfirmPrompt(false);
+        } else {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        const matchCtrl = (ch, ctrlChar, targetCode) =>
+          key === ch || key === ctrlChar || (!/^[a-z]$/.test(key) && code === targetCode);
+
+        if (matchCtrl('o', '\x0f', 'KeyO') || matchCtrl('s', '\x13', 'KeyS')) {
+          e.preventDefault();
+          e.stopPropagation();
+          saveFile();
+          textarea.focus();
+          return;
+        }
+        if (matchCtrl('x', '\x18', 'KeyX')) {
+          e.preventDefault();
+          e.stopPropagation();
+          requestExit();
+          return;
+        }
+        if (matchCtrl('g', '\x07', 'KeyG')) {
+          e.preventDefault();
+          e.stopPropagation();
+          statusBar?.classList.remove('nano-prompt');
+          statusMsg.textContent = '[ Dica: Ctrl+O grava | Ctrl+X sai (pergunta se quiser salvar) | Ctrl+K recorta ]';
+          textarea.focus();
+          return;
+        }
+        if (matchCtrl('k', '\x0b', 'KeyK')) {
+          e.preventDefault();
+          e.stopPropagation();
+          cutLine();
+          textarea.focus();
+          return;
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        requestExit();
+      }
+    };
+
+    const keyTarget = (typeof window !== 'undefined' && typeof window.addEventListener === 'function') ? window : document;
+    keyTarget.addEventListener('keydown', onNanoKeyDown, true);
+    this._nanoKeyCleanup = () => {
+      if (typeof keyTarget.removeEventListener === 'function') {
+        keyTarget.removeEventListener('keydown', onNanoKeyDown, true);
+      }
+    };
+
+    textarea.addEventListener('input', updateModified);
 
     saveBtn.addEventListener('click', () => {
+      if (confirmingExit) setConfirmPrompt(false);
       saveFile();
       textarea.focus();
     });
-    exitBtn.addEventListener('click', () => closeNano());
+    exitBtn.addEventListener('click', () => requestExit());
     helpBtn.addEventListener('click', () => {
-      statusMsg.textContent = '[ Dica: Pressione Ctrl+O para Gravar e Ctrl+X (ou Esc) para Sair ]';
+      statusBar?.classList.remove('nano-prompt');
+      statusMsg.textContent = '[ Dica: Ctrl+O grava | Ctrl+X sai (pergunta se quiser salvar) | Ctrl+K recorta ]';
       textarea.focus();
     });
     cutBtn.addEventListener('click', () => {
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+      if (confirmingExit) setConfirmPrompt(false);
+      cutLine();
       textarea.focus();
     });
+    confirmYesBtn.addEventListener('click', () => {
+      if (saveFile()) closeNano();
+    });
+    confirmNoBtn.addEventListener('click', () => closeNano());
+    confirmCancelBtn.addEventListener('click', () => {
+      statusMsg.textContent = '[ Cancelado ]';
+      setConfirmPrompt(false);
+    });
+
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => textarea.focus());
+    }
+    textarea.focus();
   }
 
   /**
@@ -830,7 +992,30 @@ class TerminalUI {
       this.lastTabInput = val;
     }
 
-    const tokens = val.split(/\s+/);
+    // Identifica o segmento do comando ativo após o último ;, &&, || ou | fora de aspas
+    let lastSepEnd = 0;
+    let inQ = null;
+    for (let i = 0; i < val.length; i++) {
+      const ch = val[i];
+      if (ch === "'" || ch === '"') {
+        inQ = inQ === ch ? null : (inQ || ch);
+      } else if (!inQ) {
+        if ((ch === '&' && val[i + 1] === '&') || (ch === '|' && val[i + 1] === '|')) {
+          lastSepEnd = i + 2;
+          i++;
+        } else if (ch === ';' || ch === '|') {
+          lastSepEnd = i + 1;
+        }
+      }
+    }
+
+    const linePrefix = val.slice(0, lastSepEnd);
+    const rawSeg = val.slice(lastSepEnd);
+    const leadMatch = rawSeg.match(/^(\s*)/);
+    const segPrefix = linePrefix + (leadMatch ? leadMatch[1] : '');
+    const activeSeg = rawSeg.slice(leadMatch ? leadMatch[1].length : 0);
+
+    const tokens = activeSeg.split(/\s+/);
     const lastToken = tokens[tokens.length - 1] || '';
 
     // 1. Autocompletar variáveis ($VAR)
@@ -844,44 +1029,60 @@ class TerminalUI {
         ])
       ).sort();
       const matches = varPool.filter(v => v.startsWith(varPrefix)).map(v => '$' + v);
-      this.applyTabMatches(tokens, lastToken, '', matches, true);
+      this.applyTabMatches(tokens, lastToken, '', matches, true, segPrefix);
       return;
     }
 
-    // 2. Autocompletar comandos / builtins / aliases no primeiro token
-    if (tokens.length <= 1 && !lastToken.includes('/')) {
+    // Desembrulha prefixo sudo para autocompletar comandos e subcomandos mesmo com sudo
+    let effStart = 0;
+    if (tokens.length > 1 && tokens[0] === 'sudo') {
+      effStart = 1;
+      while (effStart < tokens.length - 1 && tokens[effStart].startsWith('-')) {
+        if ((tokens[effStart] === '-u' || tokens[effStart] === '-g') && effStart + 1 < tokens.length - 1) {
+          effStart += 2;
+        } else {
+          effStart += 1;
+        }
+      }
+    }
+    const effTokens = tokens.slice(effStart);
+
+    // 2. Autocompletar comandos / builtins / aliases no primeiro token efetivo
+    if (effTokens.length <= 1 && !lastToken.includes('/')) {
       const baseCommands = [
-        'pwd', 'ls', 'cd', 'mkdir', 'touch', 'cat', 'echo', 'cp', 'mv', 'rm', 'rmdir',
-        'grep', 'find', 'head', 'tail', 'cut', 'tr', 'sort', 'uniq', 'wc', 'chmod',
+        'pwd', 'ls', 'cd', 'mkdir', 'touch', 'cat', 'echo', 'printf', 'cp', 'mv', 'rm', 'rmdir',
+        'grep', 'find', 'head', 'tail', 'cut', 'tr', 'sort', 'uniq', 'wc', 'chmod', 'umask',
         'chown', 'sudo', 'which', 'whoami', 'date', 'clear', 'help', 'ps', 'top', 'htop',
-        'kill', 'pkill', 'killall', 'pgrep', 'df', 'du', 'free', 'lscpu', 'lsblk', 'dmesg',
+        'kill', 'pkill', 'killall', 'pgrep', 'jobs', 'df', 'du', 'free', 'lscpu', 'lsblk', 'dmesg',
         'git', 'docker', 'sqlite3', 'tar', 'gzip', 'gunzip', 'zcat', 'zip', 'unzip', 'ln',
         'diff', 'env', 'printenv', 'export', 'unset', 'alias', 'unalias', 'history', 'uname',
         'uptime', 'more', 'less', 'sed', 'awk', 'xargs', 'tee', 'tac', 'rev', 'nl', 'paste',
         'column', 'md5sum', 'sha256sum', 'base64', 'stat', 'file', 'tree', 'realpath',
         'readlink', 'basename', 'dirname', 'pushd', 'popd', 'dirs', 'man', 'whatis', 'apropos',
-        'id', 'groups', 'who', 'w', 'last', 'hostname', 'hostnamectl', 'useradd', 'userdel',
-        'systemctl', 'service', 'journalctl', 'crontab', 'apt', 'apt-get', 'dpkg', 'ip',
-        'ifconfig', 'ping', 'traceroute', 'curl', 'wget', 'ss', 'netstat', 'dig', 'nslookup',
-        'host', 'nc', 'ufw', 'ssh', 'scp', 'rsync', 'nano', 'neofetch', 'cowsay', 'jq', 'nmap',
-        'source', 'bash', 'sh', 'test', 'expr', 'seq', 'exit', 'logout'
+        'id', 'groups', 'who', 'w', 'last', 'hostname', 'hostnamectl', 'useradd', 'usermod',
+        'userdel', 'groupadd', 'passwd', 'systemctl', 'service', 'journalctl', 'crontab', 'apt',
+        'apt-get', 'dpkg', 'ip', 'ifconfig', 'ping', 'traceroute', 'curl', 'wget', 'ss',
+        'netstat', 'dig', 'nslookup', 'host', 'nc', 'netcat', 'ufw', 'ssh', 'scp', 'rsync',
+        'nano', 'vi', 'vim', 'neofetch', 'cowsay', 'jq', 'nmap', 'source', 'bash', 'sh', 'test',
+        'expr', 'seq', 'true', 'false', 'nohup', 'command', 'builtin', 'reset-fs', 'clean-env',
+        'exit', 'logout'
       ];
       const aliasNames = Object.keys((this.commandEngine && this.commandEngine.aliases) || {});
       const allCmds = Array.from(new Set([...baseCommands, ...aliasNames])).sort();
       const matches = allCmds.filter(c => c.startsWith(lastToken));
-      this.applyTabMatches(tokens, lastToken, '', matches, true);
+      this.applyTabMatches(tokens, lastToken, '', matches, true, segPrefix);
       return;
     }
 
     // 3. Autocompletar subcomandos e argumentos contextuais
-    const firstCmd = tokens[0];
+    const firstCmd = effTokens[0];
     let contextPool = null;
 
-    if (tokens.length === 2) {
+    if (effTokens.length === 2) {
       if (firstCmd === 'git') {
-        contextPool = ['status', 'add', 'commit', 'branch', 'switch', 'checkout', 'diff', 'restore', 'reset', 'log', 'init', 'push', 'pull', '--help', '--version'];
+        contextPool = ['status', 'add', 'commit', 'branch', 'switch', 'checkout', 'merge', 'stash', 'diff', 'restore', 'reset', 'log', 'init', '--help', '--version'];
       } else if (firstCmd === 'docker') {
-        contextPool = ['ps', 'run', 'images', 'pull', 'stop', 'rm', 'rmi', 'logs', 'exec', '--help', '--version'];
+        contextPool = ['ps', 'run', 'build', 'images', 'pull', 'start', 'stop', 'restart', 'rm', 'rmi', 'logs', 'exec', 'inspect', '--help', '--version'];
       } else if (firstCmd === 'systemctl') {
         contextPool = ['status', 'start', 'stop', 'restart', 'enable', 'disable', 'is-active', 'is-enabled', 'list-units', 'reload'];
       } else if (firstCmd === 'service') {
@@ -893,22 +1094,22 @@ class TerminalUI {
       } else if (firstCmd === 'man' || firstCmd === 'whatis' || firstCmd === 'help') {
         contextPool = Object.keys((this.commandEngine && this.commandEngine.getManPagesRegistry()) || {});
       }
-    } else if (tokens.length >= 3) {
-      const sub = tokens[1];
-      if (firstCmd === 'git' && (sub === 'checkout' || sub === 'switch' || sub === 'branch')) {
+    } else if (effTokens.length >= 3) {
+      const sub = effTokens[1];
+      if (firstCmd === 'git' && (sub === 'checkout' || sub === 'switch' || sub === 'branch' || sub === 'merge')) {
         contextPool = (this.commandEngine && this.commandEngine.git && this.commandEngine.git.branches) || ['main'];
       } else if (firstCmd === 'systemctl') {
         const sKeys = Object.keys((this.commandEngine && this.commandEngine.services) || {});
         contextPool = [...sKeys, ...sKeys.map(s => s + '.service')];
       } else if (firstCmd === 'service') {
         contextPool = ['status', 'start', 'stop', 'restart', 'reload'];
-      } else if (firstCmd === 'docker' && (sub === 'stop' || sub === 'rm' || sub === 'logs' || sub === 'exec')) {
+      } else if (firstCmd === 'docker' && (sub === 'start' || sub === 'stop' || sub === 'restart' || sub === 'rm' || sub === 'logs' || sub === 'exec' || sub === 'inspect')) {
         const containers = (this.commandEngine && this.commandEngine.docker && Array.from(this.commandEngine.docker.containers.values())) || [];
         contextPool = containers.map(c => c.name).concat(containers.map(c => c.id));
       } else if (firstCmd === 'docker' && (sub === 'run' || sub === 'rmi')) {
         const images = (this.commandEngine && this.commandEngine.docker && Array.from(this.commandEngine.docker.images)) || ['hello-world', 'nginx'];
         contextPool = images;
-      } else if ((firstCmd === 'apt' || firstCmd === 'apt-get') && (sub === 'install' || sub === 'show' || sub === 'remove')) {
+      } else if ((firstCmd === 'apt' || firstCmd === 'apt-get') && (sub === 'install' || sub === 'show' || sub === 'remove' || sub === 'purge')) {
         contextPool = ['htop', 'neofetch', 'cowsay', 'vim', 'jq', 'nmap', 'tree', 'curl', 'wget', 'git', 'nginx', 'sqlite3'];
       }
     }
@@ -916,7 +1117,7 @@ class TerminalUI {
     if (contextPool && contextPool.length > 0) {
       const matches = contextPool.filter(c => c.startsWith(lastToken));
       if (matches.length > 0) {
-        this.applyTabMatches(tokens, lastToken, '', matches, true);
+        this.applyTabMatches(tokens, lastToken, '', matches, true, segPrefix);
         return;
       }
     }
@@ -925,17 +1126,17 @@ class TerminalUI {
     const matches = this.fs.getCompletions(lastToken);
     const dirPrefix = lastToken.includes('/') ? lastToken.slice(0, lastToken.lastIndexOf('/') + 1) : '';
     const partialName = lastToken.includes('/') ? lastToken.slice(lastToken.lastIndexOf('/') + 1) : lastToken;
-    this.applyTabMatches(tokens, partialName, dirPrefix, matches, false);
+    this.applyTabMatches(tokens, partialName, dirPrefix, matches, false, segPrefix);
   }
 
-  applyTabMatches(tokens, partialName, dirPrefix, matches, isCommandOrVar) {
+  applyTabMatches(tokens, partialName, dirPrefix, matches, isCommandOrVar, segPrefix = '') {
     if (!matches || matches.length === 0) return;
 
     if (matches.length === 1) {
       const match = matches[0];
       const isDir = match.endsWith('/');
       tokens[tokens.length - 1] = dirPrefix + match;
-      this.inputElement.value = tokens.join(' ') + (isDir ? '' : ' ');
+      this.inputElement.value = segPrefix + tokens.join(' ') + (isDir ? '' : ' ');
       this.lastTabInput = this.inputElement.value;
       this.tabPressCount = 0;
       this.hideChips();
@@ -946,7 +1147,7 @@ class TerminalUI {
     const common = this.getLongestCommonPrefix(matches);
     if (common && common.length > partialName.length) {
       tokens[tokens.length - 1] = dirPrefix + common;
-      this.inputElement.value = tokens.join(' ');
+      this.inputElement.value = segPrefix + tokens.join(' ');
       this.lastTabInput = this.inputElement.value;
       this.tabPressCount = 1;
     } else if (this.tabPressCount >= 2) {
@@ -962,7 +1163,7 @@ class TerminalUI {
     this.showChips(matches, (choice) => {
       const isDir = choice.endsWith('/');
       tokens[tokens.length - 1] = dirPrefix + choice;
-      this.inputElement.value = tokens.join(' ') + (isDir ? '' : ' ');
+      this.inputElement.value = segPrefix + tokens.join(' ') + (isDir ? '' : ' ');
       this.lastTabInput = this.inputElement.value;
       this.tabPressCount = 0;
       this.inputElement.focus();

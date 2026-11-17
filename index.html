@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Penguin Gym Linux - Terminal Interativo & Interface Gráfica</title>
-  <meta name="description" content="Aprenda e pratique comandos Linux diretamente no navegador com terminal interativo, explorador gráfico de arquivos, visualizador SQL/Git/Docker e 251 exercícios práticos.">
+  <meta name="description" content="Aprenda e pratique comandos Linux diretamente no navegador com terminal interativo, explorador gráfico de arquivos, visualizador SQL/Git/Docker e 256 exercícios práticos.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>🐧</text></svg>">
 </head>
@@ -17,7 +17,7 @@
       <div>
         <div class="brand-title-row">
           <h1 class="brand-title">Penguin Gym Linux</h1>
-          <span class="brand-tag" id="brandLessonsCount">pt-BR • 251 Lições</span>
+          <span class="brand-tag" id="brandLessonsCount">pt-BR • 256 Lições</span>
         </div>
         <p class="brand-subtitle">Simulador Interativo de Terminal Linux & Ambiente Gráfico</p>
       </div>
@@ -28,7 +28,7 @@
       <div class="progress-bar-container">
         <div class="progress-bar-labels">
           <span>Progresso Geral</span>
-          <span id="progressText">0 de 251 concluídos (0%)</span>
+          <span id="progressText">0 de 256 concluídos (0%)</span>
         </div>
         <div class="progress-track">
           <div class="progress-fill" id="overallProgressFill"></div>
@@ -137,10 +137,10 @@
           <div class="terminal-area" id="terminalArea">
             
             <div class="terminal-header">
-              <div class="terminal-controls">
-                <div class="terminal-control-btn close" title="Fechar"></div>
-                <div class="terminal-control-btn minimize" title="Minimizar"></div>
-                <div class="terminal-control-btn maximize" title="Maximizar"></div>
+              <div class="terminal-controls" aria-hidden="true">
+                <span class="terminal-control-btn close"></span>
+                <span class="terminal-control-btn minimize"></span>
+                <span class="terminal-control-btn maximize"></span>
               </div>
               <div class="terminal-title" id="terminalWindowTitle">user@gym:~</div>
               <div class="terminal-tools">
@@ -172,14 +172,13 @@
                 <button type="button" class="terminal-tab-key-btn" id="terminalTabBtn">Tab ⇥ Autocompletar</button>
                 <button type="button" class="terminal-tab-key-btn terminal-enter-btn" id="terminalEnterBtn">Enter ↵ Executar</button>
               </div>
-
-              <!-- Success / Completion Notification Banner -->
-              <div class="completion-bar d-none" id="completionBar" role="status" aria-live="polite">
-                <span class="completion-bar__message" id="completionBarMessage"></span>
-                <button class="completion-bar__btn" id="completionBarNextBtn" type="button" title="Pressione 'n' para avançar para a próxima lição">Próxima Lição <span class="kbd-badge">n</span> ➔</button>
-              </div>
-
             </div>
+          </div>
+
+          <!-- Success / Completion Notification Banner -->
+          <div class="completion-bar d-none" id="completionBar" role="status" aria-live="polite">
+            <span class="completion-bar__message" id="completionBarMessage"></span>
+            <button class="completion-bar__btn" id="completionBarNextBtn" type="button" title="Pressione 'n' para avançar para a próxima lição">Próxima Lição <span class="kbd-badge">n</span> ➔</button>
           </div>
         </div>
 

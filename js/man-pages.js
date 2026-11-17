@@ -2107,6 +2107,30 @@ const MAN_PAGES = {
       "reset-fs"
     ]
   },
+  "clean-env": {
+    "section": "1",
+    "short": "restaura o ambiente de treinamento ao estado inicial limpo (alias de reset-fs)",
+    "synopsis": "clean-env",
+    "description": "Restaura o sistema de arquivos virtual, variáveis de ambiente, serviços e ferramentas (Git, Docker, SQLite) para o ponto inicial limpo da lição atual.",
+    "options": [],
+    "examples": [
+      "clean-env"
+    ]
+  },
+  "umask": {
+    "section": "1",
+    "short": "exibe ou define a máscara padrão de criação de arquivos e diretórios",
+    "synopsis": "umask [-S] [MÁSCARA]",
+    "description": "Controla os bits de permissão removidos automaticamente ao criar novos arquivos (base 666) ou diretórios (base 777). Por padrão, 0022 gera arquivos 644 e pastas 755.",
+    "options": [
+      "-S  Exibe a máscara em notação simbólica (ex: u=rwx,g=rx,o=rx)"
+    ],
+    "examples": [
+      "umask",
+      "umask 027",
+      "umask -S"
+    ]
+  },
   "bc": {
     "section": "1",
     "short": "calculadora aritmética de precisão arbitrária",

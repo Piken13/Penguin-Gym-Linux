@@ -177,6 +177,7 @@ SwapFree:        2097152 kB`,
     this.oldPath = '/home/user';
     this.dirStack = [];
     this.sudoMode = false;
+    this.umask = '0022';
     this.nextInode = 1001;
 
     const c = this.getBaselineContents();
@@ -349,10 +350,16 @@ SwapFree:        2097152 kB`,
     this.sudoMode = true;
     try {
       const c = this.getBaselineContents();
-      if (!this.getNode('/home/user')) this.createDirectory('/home/user', true);
-      if (!this.getNode('/home/user/documents')) this.createDirectory('/home/user/documents', true);
-      if (!this.getNode('/home/user/projects')) this.createDirectory('/home/user/projects', true);
-      if (!this.getNode('/home/user/downloads')) this.createDirectory('/home/user/downloads', true);
+      for (const dirPath of ['/home/user', '/home/user/documents', '/home/user/projects', '/home/user/downloads']) {
+        let dirNode = this.getNode(dirPath);
+        if (!dirNode) {
+          this.createDirectory(dirPath, true, 'rwxr-xr-x', 'user');
+          dirNode = this.getNode(dirPath);
+        } else if (dirNode.owner === 'root') {
+          dirNode.owner = 'user';
+          dirNode.group = 'user';
+        }
+      }
 
       const ensureFile = (p, content, perms = 'rw-r--r--', extra = {}) => {
         const existing = this.getNode(p);
@@ -509,7 +516,7 @@ SwapFree:        2097152 kB`,
         const gzNode = this.getNode('/home/user/archive.tar.gz');
         if (gzNode) {
           gzNode.tarEntries = ['documents/', 'documents/readme.txt', 'documents/notes.txt'];
-          gzNode.filesData = [
+          gzNode.tarFilesData = [
             { path: 'documents/', type: 'directory', permissions: 'rwxr-xr-x' },
             { path: 'documents/readme.txt', type: 'file', content: this.getBaselineContents().readme, permissions: 'rw-r--r--' },
             { path: 'documents/notes.txt', type: 'file', content: this.getBaselineContents().notes, permissions: 'rw-r--r--' }
@@ -547,6 +554,9 @@ SwapFree:        2097152 kB`,
         this.writeFile('/home/user/README.md', readmeMd);
         this.writeFile('/home/user/index.html', indexHtml);
         this.writeFile('/home/user/style.css', styleCss);
+        if (lessonId !== 'git-gitignore') {
+          try { this.removeFile('/home/user/.gitignore', true); } catch {}
+        }
 
         if (lessonId !== 'git-init') {
           git.initialized = true;
@@ -555,7 +565,7 @@ SwapFree:        2097152 kB`,
         if (lessonId === 'git-commit' || lessonId === 'git-diff-staged') {
           git.index.add('README.md');
         }
-        if (['git-log', 'git-add-all', 'git-commit-second', 'git-branch-create', 'git-branch-list', 'git-switch', 'git-diff-staged', 'git-restore-staged', 'git-switch-create', 'git-merge', 'git-branch-delete', 'git-stash'].includes(lessonId)) {
+        if (['git-log', 'git-add-all', 'git-commit-second', 'git-branch-create', 'git-branch-list', 'git-switch', 'git-diff-staged', 'git-restore-staged', 'git-switch-create', 'git-merge', 'git-branch-delete', 'git-stash', 'git-gitignore'].includes(lessonId)) {
           git.commits = [{
             hash: 'a1b2c3d',
             message: 'first commit',
@@ -564,6 +574,11 @@ SwapFree:        2097152 kB`,
             date: '2026-01-15 10:00:00'
           }];
           git.trackedFiles.add('README.md');
+        }
+        if (lessonId === 'git-gitignore') {
+          this.writeFile('/home/user/.env', 'API_SECRET=penguin123\n');
+          this.writeFile('/home/user/app.js', 'console.log("Penguin Gym");\n');
+          try { this.removeFile('/home/user/.gitignore', true); } catch {}
         }
         if (['git-branch-list', 'git-switch', 'git-merge', 'git-branch-delete'].includes(lessonId)) {
           git.branches = ['main', 'feature'];
@@ -669,7 +684,7 @@ SwapFree:        2097152 kB`,
           }
           if (!passwd.split('\n').some(l => l.startsWith('devops:'))) {
             this.writeFile('/etc/passwd', passwd.trimEnd() + '\ndevops:x:1001:1001::/home/devops:/bin/bash\n');
-            this.createDirectory('/home/devops', true);
+            this.createDirectory('/home/devops', true, 'rwxr-xr-x', 'devops');
           }
           if (lessonId === 'sys-groups-check') {
             const curGroup = this.readFile('/etc/group');
@@ -760,9 +775,21 @@ SwapFree:        2097152 kB`,
           try { this.removeFile('/home/user/tokyo.csv', true); } catch {}
           try { this.removeFile('/home/user/tokyo.csv.gz', true); } catch {}
         }
+        if (lessonId === 'inc-script-perm-fix') {
+          this.writeFile('/home/user/deploy.sh', '#!/bin/bash\necho "Deploy OK: release 2.4 enviada!"\n');
+          const dNode = this.getNode('/home/user/deploy.sh');
+          if (dNode) {
+            dNode.permissions = 'rw-r--r--';
+            dNode.owner = 'user';
+            dNode.group = 'user';
+          }
+        }
       }
     } finally {
       this.sudoMode = prevSudo;
+    }
+    if (['permission-sudo-basic', 'bash-redirect-stderr', 'bash-redirect-all', 'bash-redirect-devnull'].includes(lessonId)) {
+      this.sudoMode = false;
     }
   }
 
@@ -985,7 +1012,7 @@ SwapFree:        2097152 kB`,
     return target;
   }
 
-  createDirectory(path, recursive = false, mode = 'rwxr-xr-x') {
+  createDirectory(path, recursive = false, mode = 'rwxr-xr-x', owner = null) {
     const target = this.resolvePath(path);
     if (recursive) {
       const parts = target.split('/').filter(Boolean);
@@ -994,7 +1021,7 @@ SwapFree:        2097152 kB`,
         currPath += '/' + part;
         const node = this.getNode(currPath);
         if (!node) {
-          this.createDirectory(currPath, false, mode);
+          this.createDirectory(currPath, false, mode, owner);
         } else if (node.type !== 'directory') {
           throw new Error(`mkdir: '${currPath}' já existe e não é um diretório`);
         }
@@ -1013,7 +1040,8 @@ SwapFree:        2097152 kB`,
     if (parent.children[name]) {
       throw new Error(`mkdir: não foi possível criar o diretório '${path}': Arquivo ou diretório já existe`);
     }
-    const effectiveOwner = this.sudoMode ? 'root' : 'user';
+    const isHomeUser = target.startsWith('/home/user/') || target === '/home/user';
+    const effectiveOwner = owner || (isHomeUser ? 'user' : (this.sudoMode ? 'root' : 'user'));
     parent.children[name] = this.makeDir(name, {}, effectiveOwner, effectiveOwner, mode);
     parent.links = (parent.links || 2) + 1;
     parent.mtime = Date.now();
@@ -1078,10 +1106,26 @@ SwapFree:        2097152 kB`,
     if (!this.hasPermission(parent, 'w')) {
       throw new Error(`rm: não foi possível remover '${path}': Permissão negada`);
     }
-    if (parent.children[name].type === 'directory' && parent.links > 2) {
+    const targetNode = parent.children[name];
+    const collectInodes = (n, acc) => {
+      if (!n) return;
+      if (n.type === 'file' && n.inode && n.links > 1) acc.push(n.inode);
+      if (n.type === 'directory' && n.children) {
+        for (const child of Object.values(n.children)) collectInodes(child, acc);
+      }
+    };
+    const affectedInodes = [];
+    collectInodes(targetNode, affectedInodes);
+
+    if (targetNode.type === 'directory' && parent.links > 2) {
       parent.links--;
     }
     delete parent.children[name];
+    for (const inode of affectedInodes) {
+      this.syncInodeNodes(inode, (n) => {
+        if (n.links > 1) n.links--;
+      });
+    }
     parent.mtime = Date.now();
     return true;
   }

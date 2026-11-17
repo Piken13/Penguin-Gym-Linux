@@ -11,6 +11,14 @@ class CommandEngine {
     this.docker = docker;
     this.sql = sql;
     this.history = [];
+    this.resetEnvironment();
+  }
+
+  /**
+   * Restaura variáveis, aliases, serviços, pacotes e estado do firewall para o padrão inicial
+   */
+  resetEnvironment(clearHistory = false) {
+    if (clearHistory) this.history = [];
     this.killedProcesses = new Set();
     this.backgroundJobs = [];
     this.nextJobPid = 501;
@@ -39,7 +47,7 @@ class CommandEngine {
       ssh: { active: true, enabled: true, pid: 88, desc: 'OpenBSD Secure Shell server' },
       docker: { active: true, enabled: true, pid: 210, desc: 'Docker Application Container Engine' },
       cron: { active: true, enabled: true, pid: 74, desc: 'Regular background program processing daemon' },
-      postgresql: { active: false, enabled: false, pid: 0, desc: 'PostgreSQL RDBMS' }
+      postgresql: { active: false, enabled: false, pid: 280, desc: 'PostgreSQL RDBMS' }
     };
     this.installedPackages = new Set([
       'bash', 'coreutils', 'grep', 'sed', 'gawk', 'findutils', 'tar', 'gzip',
@@ -55,6 +63,68 @@ class CommandEngine {
   }
 
   /**
+   * Configura o estado inicial do CommandEngine esperado por missões específicas.
+   */
+  prepareForLesson(lessonId) {
+    if (!lessonId) return;
+    this.killedProcesses.clear();
+    this.backgroundJobs = [];
+
+    if (lessonId === 'process-ps-aux' || lessonId === 'process-ps-grep' || lessonId === 'process-pgrep' || lessonId === 'process-kill-sigterm' || lessonId === 'process-kill-sigkill' || lessonId === 'process-pkill') {
+      this.services.nginx.active = true;
+      this.services.ssh.active = true;
+      this.services.cron.active = true;
+      this.services.docker.active = true;
+    }
+    if (lessonId === 'bash-history-exec') {
+      const lastCmd = this.history[this.history.length - 1];
+      if (!lastCmd || lastCmd.startsWith('unalias') || lastCmd === '!!') {
+        this.history.push('echo "Linux"');
+      }
+    }
+    if (lessonId === 'bash-alias-remove') {
+      this.aliases['c'] = 'clear';
+    }
+    if (lessonId === 'sys-apt-remove' || lessonId === 'sys-apt-purge') {
+      this.installedPackages.add('cowsay');
+      const prevSudo = this.fs.sudoMode;
+      this.fs.sudoMode = true;
+      try {
+        if (!this.fs.getNode('/usr/bin/cowsay')) {
+          this.fs.createFile('/usr/bin/cowsay', '#!/bin/sh\n# Binário do pacote cowsay\n', 'root', 'rwxr-xr-x');
+        }
+      } finally {
+        this.fs.sudoMode = prevSudo;
+      }
+    }
+    if (lessonId === 'sys-systemctl-stop' || lessonId === 'sys-systemctl-disable') {
+      this.services.nginx.active = true;
+      this.services.nginx.enabled = true;
+    }
+    if (lessonId === 'sys-systemctl-start' || lessonId === 'inc-postgresql-down') {
+      this.services.postgresql.active = false;
+      this.services.postgresql.enabled = false;
+    }
+    if (lessonId === 'sys-crontab-list' || lessonId === 'sys-crontab-remove' || lessonId === 'sys-crontab-edit') {
+      this.userCrontab = '# m h  dom mon dow   command\n0 3 * * * /usr/local/bin/backup.sh\n';
+    }
+    if (lessonId.startsWith('net-curl-') || lessonId === 'net-nc-port' || lessonId === 'net-ss-netstat' || lessonId === 'inc-nginx-404') {
+      this.services.nginx.active = true;
+      this.services.nginx.enabled = true;
+      this.services.ssh.active = true;
+      if (this.ufwState.enabled && !this.ufwState.rules.some(r => /^(80(\/tcp)?|http)\s+ALLOW/i.test(r.trim()))) {
+        this.ufwState.rules.push('80/tcp                     ALLOW IN    Anywhere');
+      }
+    }
+    if (lessonId === 'net-ufw-delete' || lessonId === 'net-ufw-disable') {
+      this.ufwState.enabled = true;
+      if (!this.ufwState.rules.some(r => r.startsWith('80/tcp'))) {
+        this.ufwState.rules.push('80/tcp                     ALLOW IN    Anywhere');
+      }
+    }
+  }
+
+  /**
    * Obtém o valor de uma variável de ambiente ou especial do Bash ($USER, $PWD, $?, $$, etc.)
    */
   getVar(name) {
@@ -63,7 +133,7 @@ class CommandEngine {
     if (name === 'PWD') return this.fs.currentPath;
     if (name === 'OLDPWD') return this.fs.oldPath || this.fs.currentPath;
     if (name === 'RANDOM') return String(Math.floor(Math.random() * 32768));
-    if (name === 'UID' || name === 'EUID') return '1000';
+    if (name === 'UID' || name === 'EUID') return this.fs.sudoMode ? '0' : '1000';
     if (Object.prototype.hasOwnProperty.call(this.shellVars, name)) {
       return this.shellVars[name];
     }
@@ -230,24 +300,6 @@ class CommandEngine {
       this.history.push(line);
     }
 
-    // Detecta execução em segundo plano com '&' no final (fora de &&, &> ou aspas)
-    if (!isSubshell && /(?:^|[^&>])&\s*$/.test(line) && !line.endsWith('&&')) {
-      const bgCmd = line.replace(/&\s*$/, '').trim();
-      if (bgCmd) {
-        const jobId = this.backgroundJobs.length + 1;
-        const jobPid = this.nextJobPid++;
-        this.backgroundJobs.push({ id: jobId, pid: String(jobPid), cmd: bgCmd, state: 'Em execução' });
-        this.lastExitCode = 0;
-        return {
-          output: `[${jobId}] ${jobPid}`,
-          code: 0,
-          rawCommand: originalCommand,
-          expandedCommand: historyEcho,
-          wasHistoryExpansion
-        };
-      }
-    }
-
     const parts = this.splitSequential(line);
     const combinedOutput = [];
     if (historyEcho) combinedOutput.push(historyEcho);
@@ -264,6 +316,17 @@ class CommandEngine {
         const prevOp = parts[i - 1].nextOp;
         if (prevOp === '&&' && lastCode !== 0) continue;
         if (prevOp === '||' && lastCode === 0) continue;
+      }
+
+      if (!isSubshell && item.nextOp === '&') {
+        const jobId = this.backgroundJobs.length + 1;
+        const jobPid = this.nextJobPid++;
+        this.backgroundJobs.push({ id: jobId, pid: String(jobPid), cmd: item.cmd, state: 'Em execução' });
+        combinedOutput.push(`[${jobId}] ${jobPid}`);
+        lastCode = 0;
+        lastType = 'text';
+        this.lastExitCode = 0;
+        continue;
       }
 
       const res = this.executeSinglePipeline(item.cmd);
@@ -306,7 +369,7 @@ class CommandEngine {
   }
 
   /**
-   * Divide comandos por ';', '&&' ou '||' APENAS fora de aspas, fora de (...) e fora de blocos for/if/while
+   * Divide comandos por ';', '&&', '||' ou '&' APENAS fora de aspas, fora de (...) e fora de blocos for/if/while
    */
   splitSequential(str) {
     const parts = [];
@@ -314,45 +377,67 @@ class CommandEngine {
     let inQuote = null;
     let parenDepth = 0;
     let blockDepth = 0;
+    let atCommandPos = true;
 
     const checkKeywordAt = (idx) => {
       const prevCh = idx > 0 ? str[idx - 1] : ';';
-      if (!/[\s;&|()]/.test(prevCh)) return null;
+      if (!/[\s;&|(){}]/.test(prevCh)) return null;
       const rest = str.slice(idx);
-      const m = rest.match(/^(for|while|until|if|done|fi)(?=[\s;&|()]|$)/);
+      const m = rest.match(/^(for|while|until|if|then|do|else|elif|done|fi)(?=[\s;&|()]|$)/);
       return m ? m[1] : null;
     };
 
     for (let i = 0; i < str.length; i++) {
       const ch = str[i];
-      if (ch === '\\' && i + 1 < str.length) {
+      if (ch === '\\' && i + 1 < str.length && inQuote !== "'") {
         curr += ch + str[i + 1];
         i++;
+        atCommandPos = false;
         continue;
       }
       if (ch === '"' || ch === "'") {
         if (inQuote === ch) inQuote = null;
         else if (!inQuote) inQuote = ch;
         curr += ch;
+        atCommandPos = false;
         continue;
       }
       if (!inQuote) {
         if (ch === '(') {
           parenDepth++;
           curr += ch;
+          atCommandPos = true;
           continue;
         }
         if (ch === ')' && parenDepth > 0) {
           parenDepth--;
           curr += ch;
+          atCommandPos = false;
           continue;
         }
         if (parenDepth === 0) {
           const kw = checkKeywordAt(i);
-          if (kw === 'for' || kw === 'while' || kw === 'until' || kw === 'if') {
-            blockDepth++;
-          } else if ((kw === 'done' || kw === 'fi') && blockDepth > 0) {
-            blockDepth--;
+          if (kw && atCommandPos) {
+            if (kw === 'for' || kw === 'while' || kw === 'until' || kw === 'if') {
+              blockDepth++;
+              atCommandPos = false;
+              curr += kw;
+              i += kw.length - 1;
+              continue;
+            }
+            if ((kw === 'then' || kw === 'do' || kw === 'else' || kw === 'elif') && blockDepth > 0) {
+              atCommandPos = true;
+              curr += kw;
+              i += kw.length - 1;
+              continue;
+            }
+            if ((kw === 'done' || kw === 'fi') && blockDepth > 0) {
+              blockDepth--;
+              atCommandPos = false;
+              curr += kw;
+              i += kw.length - 1;
+              continue;
+            }
           }
         }
       }
@@ -361,19 +446,35 @@ class CommandEngine {
           if (curr.trim()) parts.push({ cmd: curr.trim(), nextOp: '&&' });
           curr = '';
           i++;
+          atCommandPos = true;
           continue;
         }
         if (ch === '|' && str[i + 1] === '|') {
           if (curr.trim()) parts.push({ cmd: curr.trim(), nextOp: '||' });
           curr = '';
           i++;
+          atCommandPos = true;
+          continue;
+        }
+        if (ch === '&' && str[i + 1] !== '>' && (i === 0 || str[i - 1] !== '>')) {
+          if (curr.trim()) parts.push({ cmd: curr.trim(), nextOp: '&' });
+          curr = '';
+          atCommandPos = true;
           continue;
         }
         if (ch === ';') {
           if (curr.trim()) parts.push({ cmd: curr.trim(), nextOp: ';' });
           curr = '';
+          atCommandPos = true;
           continue;
         }
+      }
+      if (!inQuote && parenDepth === 0 && blockDepth > 0 && ch === ';') {
+        atCommandPos = true;
+      } else if (!inQuote && /\s/.test(ch)) {
+        // Keep atCommandPos if still before any non-whitespace command word
+      } else {
+        atCommandPos = false;
       }
       curr += ch;
     }
@@ -465,7 +566,8 @@ class CommandEngine {
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i].trim();
       lastRes = this.executeSingleCommandWithRedirection(seg, currentInput);
-      currentInput = lastRes.output || '';
+      const out = lastRes.output || '';
+      currentInput = out && lastRes.trailingNewline !== false && !out.endsWith('\n') ? out + '\n' : out;
       this.lastExitCode = lastRes.code !== undefined ? lastRes.code : 0;
       if (lastRes.action) {
         if (lastRes.action === 'less' && i < segments.length - 1) {
@@ -983,6 +1085,7 @@ class CommandEngine {
       const segs = braceExpandedTokens[tIdx];
       let combined = '';
       let hasUnquotedWildcard = false;
+      let hasUnquotedSubstOrVar = false;
 
       for (let sIdx = 0; sIdx < segs.length; sIdx++) {
         const seg = segs[sIdx];
@@ -1000,6 +1103,9 @@ class CommandEngine {
               text = text.slice(0, eqIdx + 1) + home + restVal.slice(1);
             }
           }
+          if ((text.includes('$') || text.includes('`')) && !(sIdx === 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(text))) {
+            hasUnquotedSubstOrVar = true;
+          }
           text = this.expandVarsAndSubshells(text);
           if (/[*?]|\[.+?\]/.test(text)) {
             hasUnquotedWildcard = true;
@@ -1011,9 +1117,23 @@ class CommandEngine {
         combined += text;
       }
 
-      // Evita expandir curinga após -name no comando find se o aluno esqueceu aspas
       const prevToken = finalTokens[finalTokens.length - 1];
       const isFindNameArg = finalTokens[0] === 'find' && (prevToken === '-name' || prevToken === '-iname');
+
+      // Word splitting para expansões sem aspas ($VAR, $(cmd), `cmd`)
+      if (hasUnquotedSubstOrVar && segs.every(s => s.quote === null)) {
+        const splitPieces = combined.trim().split(/\s+/).filter(Boolean);
+        for (const piece of splitPieces) {
+          if (hasUnquotedWildcard && !isFindNameArg && /[*?]|\[.+?\]/.test(piece)) {
+            const matches = this.fs.expandGlob(piece);
+            if (matches.length > 0) finalTokens.push(...matches);
+            else finalTokens.push(piece);
+          } else {
+            finalTokens.push(piece);
+          }
+        }
+        continue;
+      }
 
       if (hasUnquotedWildcard && !isFindNameArg) {
         const matches = this.fs.expandGlob(combined);
@@ -1179,7 +1299,8 @@ class CommandEngine {
     if (!isError && redirectOutMode && targetOutFile) {
       try {
         const isAppend = redirectOutMode === '>>';
-        const contentToWrite = stdoutText + (stdoutText.endsWith('\n') ? '' : '\n');
+        const needsNl = result.trailingNewline !== false && !stdoutText.endsWith('\n');
+        const contentToWrite = stdoutText + (needsNl ? '\n' : '');
         this.fs.writeFile(targetOutFile, contentToWrite, isAppend);
         return { output: '', code: result.code || 0 };
       } catch (err) {
@@ -1401,8 +1522,10 @@ class CommandEngine {
           return this.cmdCat(args, stdin);
 
         case 'echo':
-        case 'printf':
           return this.cmdEcho(args);
+
+        case 'printf':
+          return this.cmdPrintf(args);
 
         case 'cp':
           return this.cmdCp(args);
@@ -1487,6 +1610,9 @@ class CommandEngine {
         case 'chmod':
           return this.cmdChmod(args);
 
+        case 'umask':
+          return this.cmdUmask(args);
+
         case 'chown':
           return this.cmdChown(args);
 
@@ -1500,17 +1626,27 @@ class CommandEngine {
             const targetUser = cleanArgs.find((a, idx) => idx > 0 && !a.startsWith('-')) || 'root';
             return this.enterUserSession(targetUser, isLogin);
           }
+          let targetUser = 'root';
           while (cleanArgs.length > 0 && (cleanArgs[0] === '-u' || cleanArgs[0] === '-E' || cleanArgs[0] === '-s')) {
-            if (cleanArgs[0] === '-u') cleanArgs.splice(0, 2);
-            else cleanArgs.shift();
+            if (cleanArgs[0] === '-u') {
+              targetUser = cleanArgs[1] || 'root';
+              cleanArgs.splice(0, 2);
+            } else {
+              cleanArgs.shift();
+            }
           }
           if (cleanArgs.length === 0) return { output: 'sudo: comando ausente', code: 1, type: 'error' };
           const prevSudo = this.fs.sudoMode;
-          this.fs.sudoMode = true;
+          const prevUser = this.envVars.USER;
+          this.fs.sudoMode = targetUser === 'root';
+          this.envVars.USER = targetUser;
+          this.shellVars.USER = targetUser;
           try {
             return this.dispatchCommand(cleanArgs[0], cleanArgs.slice(1), stdin);
           } finally {
             this.fs.sudoMode = prevSudo;
+            this.envVars.USER = prevUser;
+            this.shellVars.USER = prevUser;
           }
         }
 
@@ -1530,6 +1666,9 @@ class CommandEngine {
         }
 
         case 'whoami':
+          if (this.envVars.USER && this.envVars.USER !== 'user') {
+            return { output: this.fs.sudoMode ? 'root' : this.envVars.USER, code: 0 };
+          }
           return { output: this.fs.sudoMode ? 'root' : 'user', code: 0 };
 
         case 'id':
@@ -1687,8 +1826,20 @@ Operating System: Debian GNU/Linux 12 (bookworm)
           return { output: '', code: 0 };
 
         case 'kill': {
-          const isForce = args.includes('-9') || args.includes('-KILL') || args.includes('-SIGKILL');
-          const pidArg = args.find(a => !a.startsWith('-'));
+          let isForce = false;
+          let pidArg = null;
+          for (let i = 0; i < args.length; i++) {
+            const a = args[i];
+            if (a === '-9' || a === '-KILL' || a === '-SIGKILL') {
+              isForce = true;
+            } else if ((a === '-s' || a === '-n') && args[i + 1]) {
+              const sig = args[++i].toUpperCase();
+              if (sig === '9' || sig === 'KILL' || sig === 'SIGKILL') isForce = true;
+            } else if (!a.startsWith('-')) {
+              pidArg = a;
+              break;
+            }
+          }
           if (!pidArg) return { output: 'kill: uso: kill [-s sigspec | -n signum | -sigspec] pid', code: 1, type: 'error' };
           if (pidArg.startsWith('%')) {
             const jobId = parseInt(pidArg.slice(1), 10);
@@ -1699,6 +1850,15 @@ Operating System: Debian GNU/Linux 12 (bookworm)
             return { output: `[${removed.id}]+  ${isForce ? 'Morto' : 'Terminado'}               ${removed.cmd}`, code: 0 };
           }
           this.killedProcesses.add(pidArg);
+          if (pidArg === '123' || pidArg === '124') {
+            this.services.nginx.active = false;
+          } else if (pidArg === '88') {
+            this.services.ssh.active = false;
+          } else if (pidArg === '74') {
+            this.services.cron.active = false;
+          } else if (pidArg === '210') {
+            this.services.docker.active = false;
+          }
           this.backgroundJobs = this.backgroundJobs.filter(j => j.pid !== pidArg);
           return { output: `[1]+  ${isForce ? 'Morto (SIGKILL)' : 'Terminado'}               processo ${pidArg}`, code: 0 };
         }
@@ -1908,14 +2068,15 @@ Operating System: Debian GNU/Linux 12 (bookworm)
 
         case 'nmap': {
           const host = args.find(a => !a.startsWith('-')) || 'localhost';
+          const portLines = [];
+          if (this.services.ssh.active) portLines.push('22/tcp   open  ssh');
+          if (this.services.nginx.active) portLines.push('80/tcp   open  http');
+          if (this.services.postgresql.active) portLines.push('5432/tcp open  postgresql');
           return {
             output: `Starting Nmap 7.93 ( https://nmap.org )
 Nmap scan report for ${host} (127.0.0.1)
 Host is up (0.00012s latency).
-PORT     STATE SERVICE
-22/tcp   open  ssh
-80/tcp   open  http
-5432/tcp open  postgresql
+${portLines.length > 0 ? 'PORT     STATE SERVICE\n' + portLines.join('\n') : 'All 1000 scanned ports on ' + host + ' are closed'}
 
 Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
             code: 0
@@ -2155,6 +2316,15 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
   }
 
   cmdHelp(args = []) {
+    const getCatRangeLabel = (catId, fallback) => {
+      const all = (typeof ALL_LESSONS !== 'undefined' && Array.isArray(ALL_LESSONS)) ? ALL_LESSONS : null;
+      if (!all) return fallback;
+      const indices = [];
+      all.forEach((l, i) => { if (l.category === catId) indices.push(i + 1); });
+      if (indices.length === 0) return fallback;
+      return `Lições #${indices[0]} - #${indices[indices.length - 1]}`;
+    };
+
     const categoriesData = [
       {
         num: 1,
@@ -2162,7 +2332,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['iniciante', 'beginner', '1', 'basico'],
         icon: '🌱',
         name: 'Iniciante',
-        lessons: 'Lições #1 - #18',
+        lessons: getCatRangeLabel('beginner', 'Lições #1 - #18'),
         desc: 'Comandos fundamentais de navegação, inspeção básica e terminal',
         commandsSummary: 'pwd, ls, cd, clear, whoami, date, echo, cat, head, tail, wc, sort, uniq, grep, which, env, help',
         commands: [
@@ -2191,7 +2361,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['fundamentos', 'fundamentals', '2'],
         icon: '📁',
         name: 'Fundamentos',
-        lessons: 'Lições #19 - #51',
+        lessons: getCatRangeLabel('fundamentals', 'Lições #19 - #59'),
         desc: 'Manipulação de arquivos, diretórios, permissões e busca',
         commandsSummary: 'mkdir, touch, cp, mv, rm, rmdir, diff, find, chmod, chown, sudo, less, more, nano, vi/vim, man, whatis, apropos, neofetch, hostnamectl, uname',
         commands: [
@@ -2224,7 +2394,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['sysadmin', 'admin', 'sistema', '3'],
         icon: '🛡️',
         name: 'Sysadmin',
-        lessons: 'Lições #52 - #71',
+        lessons: getCatRangeLabel('sysadmin', 'Lições #60 - #95'),
         desc: 'Administração de sistema, hardware, serviços, usuários e pacotes',
         commandsSummary: 'lscpu, lsblk, free, df, fdisk, blkid, systemctl, service, journalctl, apt, dpkg, useradd, usermod, passwd, groups, id, su, sudo -i, crontab, dmesg, vmstat, exit',
         commands: [
@@ -2259,7 +2429,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['avancado', 'avançado', 'advanced', '4'],
         icon: '⚡',
         name: 'Avançado',
-        lessons: 'Lições #72 - #89',
+        lessons: getCatRangeLabel('advanced', 'Lições #96 - #121'),
         desc: 'Pipelines avançados, filtros de fluxo e gerenciamento de processos',
         commandsSummary: '| (pipe), tee, cut, tr, sed, awk, xargs, column, paste, tree, ps, top, htop, kill, pkill, du, jq',
         commands: [
@@ -2287,7 +2457,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['lpic', 'lpic-1', '5'],
         icon: '🐧',
         name: 'LPIC-1',
-        lessons: 'Lições #90 - #109',
+        lessons: getCatRangeLabel('lpic', 'Lições #122 - #149'),
         desc: 'Comandos da certificação LPIC-1 (arquivos, links, compactação e integridade)',
         commandsSummary: 'tar, gzip, gunzip, zcat, zip, unzip, ln, stat, file, nl, tac, rev, md5sum, sha256sum, cksum, base64',
         commands: [
@@ -2312,7 +2482,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['git', '6'],
         icon: '🔀',
         name: 'Git',
-        lessons: 'Lições #110 - #119',
+        lessons: getCatRangeLabel('git', 'Lições #150 - #165'),
         desc: 'Controle de versão distribuído de arquivos e projetos',
         commandsSummary: 'git (init, status, add, commit, log, diff, branch, checkout, merge, restore)',
         commands: [
@@ -2335,7 +2505,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['docker', '7'],
         icon: '🐳',
         name: 'Docker',
-        lessons: 'Trilha Docker',
+        lessons: getCatRangeLabel('docker', 'Lições #166 - #180'),
         desc: 'Gerenciamento de containers e imagens de aplicações isoladas',
         commandsSummary: 'docker (pull, images, build, run, start, ps, logs, exec, inspect, stop, rm, rmi)',
         commands: [
@@ -2359,7 +2529,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['scripts', 'scripting', 'script', '8'],
         icon: '📜',
         name: 'Scripts',
-        lessons: 'Lições #130 - #144',
+        lessons: getCatRangeLabel('scripting', 'Lições #181 - #203'),
         desc: 'Automação bash, variáveis, laços, condicionais e histórico',
         commandsSummary: 'bash, sh, source, alias, unalias, history, !!, pushd, popd, dirs, for...done, if...fi, test / [ ], $((calc)), $VAR, $(cmd), <<<',
         commands: [
@@ -2388,7 +2558,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['redes', 'rede', 'networking', 'net', '9'],
         icon: '🌐',
         name: 'Redes',
-        lessons: 'Lições #145 - #162',
+        lessons: getCatRangeLabel('networking', 'Lições #204 - #229'),
         desc: 'Conectividade, diagnósticos, resolução DNS e firewall',
         commandsSummary: 'ip (addr/route), ifconfig, ping, curl, wget, dig, nslookup, host, traceroute, ss, netstat, nc, nmap, ufw',
         commands: [
@@ -2415,7 +2585,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['sql', 'database', 'banco', '10'],
         icon: '🗄️',
         name: 'SQL',
-        lessons: 'Trilha SQL',
+        lessons: getCatRangeLabel('database', 'Lições #230 - #246'),
         desc: 'Banco de dados relacional SQLite e consultas estruturadas',
         commandsSummary: 'sqlite3 <banco.db> "QUERY", .tables, .schema, CREATE, INSERT, SELECT, WHERE, LIKE, AVG, JOIN, UPDATE, DELETE',
         commands: [
@@ -2439,7 +2609,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['incidentes', 'incidents', 'boss', 'troubleshooting', '11'],
         icon: '🚨',
         name: 'Incidentes',
-        lessons: 'Missões Cross-Domain',
+        lessons: getCatRangeLabel('incidents', 'Lições #247 - #251'),
         desc: 'Missões práticas de investigação e resolução de incidentes combinando múltiplos comandos',
         commandsSummary: 'grep, awk, systemctl, ss, git restore, docker stop/rm/rmi, sqlite3, gzip, sha256sum',
         commands: [
@@ -2950,9 +3120,9 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
     let text = '';
     if (files.length === 0) {
-      text = stdin;
+      text = (stdin || '').replace(/\n$/, '');
     } else {
-      text = files.map(f => this.fs.readFile(f)).join('\n');
+      text = files.map(f => this.fs.readFile(f).replace(/\n$/, '')).join('\n');
     }
 
     if (showNumbers) {
@@ -2964,9 +3134,11 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
   }
 
   cmdEcho(args) {
+    let noNewline = false;
     let interpretEscapes = false;
     let startIdx = 0;
     while (startIdx < args.length && /^-[neE]+$/.test(args[startIdx])) {
+      if (args[startIdx].includes('n')) noNewline = true;
       if (args[startIdx].includes('e')) interpretEscapes = true;
       if (args[startIdx].includes('E')) interpretEscapes = false;
       startIdx++;
@@ -2975,7 +3147,25 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     if (interpretEscapes) {
       out = out.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
     }
-    return { output: out, code: 0 };
+    return { output: out, code: 0, trailingNewline: !noNewline };
+  }
+
+  cmdPrintf(args) {
+    if (args.length === 0) return { output: '', code: 0, trailingNewline: false };
+    const fmt = args[0];
+    const vals = args.slice(1);
+    let valIdx = 0;
+    let formatted = fmt.replace(/%([sSdDf%])/g, (m, spec) => {
+      if (spec === '%') return '%';
+      const v = valIdx < vals.length ? vals[valIdx++] : '';
+      if (spec === 'd' || spec === 'D') return String(parseInt(v, 10) || 0);
+      if (spec === 'f' || spec === 'F') return String(parseFloat(v) || 0);
+      return String(v);
+    });
+    formatted = formatted.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+    const endsWithNl = formatted.endsWith('\n');
+    if (endsWithNl) formatted = formatted.slice(0, -1);
+    return { output: formatted, code: 0, trailingNewline: endsWithNl };
   }
 
   cmdCp(args) {
@@ -3061,6 +3251,11 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     let invertMatch = false;
     let countOnly = false;
     let extendedRegex = false;
+    let filesWithMatches = false;
+    let forceWithFilename = false;
+    let suppressFilename = false;
+    let wordMatch = false;
+    let quiet = false;
     let pattern = null;
     const files = [];
 
@@ -3070,6 +3265,12 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       else if (a === '--recursive') recursive = true;
       else if (a === '--count') countOnly = true;
       else if (a === '--extended-regexp') extendedRegex = true;
+      else if (a === '--files-with-matches') filesWithMatches = true;
+      else if (a === '--with-filename') forceWithFilename = true;
+      else if (a === '--no-filename') suppressFilename = true;
+      else if (a === '--word-regexp') wordMatch = true;
+      else if (a === '--quiet' || a === '--silent') quiet = true;
+      else if (a === '-e' && args[i + 1] !== undefined) pattern = args[++i];
       else if (a.startsWith('-') && a.length > 1) {
         if (a.includes('i')) ignoreCase = true;
         if (a.includes('r') || a.includes('R')) recursive = true;
@@ -3077,6 +3278,11 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         if (a.includes('v')) invertMatch = true;
         if (a.includes('c')) countOnly = true;
         if (a.includes('E')) extendedRegex = true;
+        if (a.includes('l')) filesWithMatches = true;
+        if (a.includes('H')) forceWithFilename = true;
+        if (a.includes('h')) suppressFilename = true;
+        if (a.includes('w')) wordMatch = true;
+        if (a.includes('q')) quiet = true;
       } else if (pattern === null) {
         pattern = a;
       } else {
@@ -3085,36 +3291,45 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     }
 
     if (pattern === null) throw new Error('grep: padrão de busca ausente');
-    const regexSource = extendedRegex ? pattern : pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let regexSource = extendedRegex ? pattern : pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (wordMatch) regexSource = `\\b(?:${regexSource})\\b`;
     const reg = new RegExp(regexSource, ignoreCase ? 'i' : '');
 
     const matchedLines = [];
+    const matchedFileNames = [];
+    const perFileCounts = [];
 
-    const checkContent = (content, prefix = '') => {
+    const checkContent = (content, prefix = '', targetLabel = '') => {
       const lines = (content || '').split('\n');
+      let fileMatches = 0;
       lines.forEach((line, idx) => {
         if (!line && idx === lines.length - 1) return;
         const isMatch = reg.test(line);
         if (invertMatch ? !isMatch : isMatch) {
+          fileMatches++;
           let out = line;
           if (showLineNum) out = `${idx + 1}:${out}`;
           if (prefix) out = `${prefix}:${out}`;
           matchedLines.push(out);
         }
       });
+      if (fileMatches > 0 && targetLabel && !matchedFileNames.includes(targetLabel)) {
+        matchedFileNames.push(targetLabel);
+      }
+      if (targetLabel) perFileCounts.push(`${prefix ? prefix + ':' : ''}${fileMatches}`);
     };
 
     const searchTarget = (targetPath, showPrefix) => {
       const node = this.fs.getNode(targetPath);
       if (!node) throw new Error(`grep: ${targetPath}: Arquivo ou diretório não encontrado`);
       if (node.type === 'file') {
-        checkContent(node.content, showPrefix ? targetPath : '');
+        checkContent(node.content, showPrefix ? targetPath : '', targetPath);
       } else if (node.type === 'directory') {
         if (!recursive) throw new Error(`grep: ${targetPath}: É um diretório (use -r)`);
         for (const [k, child] of Object.entries(node.children || {})) {
           const subPath = targetPath === '.' ? k : `${targetPath.replace(/\/$/, '')}/${k}`;
           if (child.type === 'file') {
-            checkContent(child.content, subPath);
+            checkContent(child.content, suppressFilename ? '' : subPath, subPath);
           } else if (child.type === 'directory') {
             searchTarget(subPath, true);
           }
@@ -3124,21 +3339,29 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
     if (files.length === 0) {
       if (recursive) {
-        searchTarget('.', true);
+        searchTarget('.', !suppressFilename);
       } else {
-        checkContent(stdin, '');
+        checkContent(stdin, '', '');
       }
     } else {
-      const showPrefix = files.length > 1 || recursive;
+      const showPrefix = !suppressFilename && (forceWithFilename || files.length > 1 || recursive);
       for (const f of files) {
         searchTarget(f, showPrefix);
       }
     }
 
-    if (countOnly) {
-      return { output: String(matchedLines.length), code: matchedLines.length > 0 ? 0 : 1 };
+    const foundAny = matchedLines.length > 0;
+    if (quiet) return { output: '', code: foundAny ? 0 : 1 };
+    if (filesWithMatches) {
+      return { output: matchedFileNames.join('\n'), code: foundAny ? 0 : 1 };
     }
-    return { output: matchedLines.join('\n'), code: matchedLines.length > 0 ? 0 : 1 };
+    if (countOnly) {
+      if (perFileCounts.length > 1 || (perFileCounts.length === 1 && forceWithFilename)) {
+        return { output: perFileCounts.join('\n'), code: foundAny ? 0 : 1 };
+      }
+      return { output: String(matchedLines.length), code: foundAny ? 0 : 1 };
+    }
+    return { output: matchedLines.join('\n'), code: foundAny ? 0 : 1 };
   }
 
   cmdFind(args) {
@@ -3265,7 +3488,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
   cmdHead(args, stdin) {
     let count = 10;
-    let file = null;
+    const files = [];
     for (let i = 0; i < args.length; i++) {
       if ((args[i] === '-n' || args[i] === '--lines') && args[i + 1]) {
         count = parseInt(args[++i], 10);
@@ -3274,17 +3497,24 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       } else if (args[i].startsWith('-n') && args[i].length > 2) {
         count = parseInt(args[i].slice(2), 10);
       } else if (!args[i].startsWith('-')) {
-        file = args[i];
+        files.push(args[i]);
       }
     }
-    const content = file ? this.fs.readFile(file) : stdin;
-    const lines = content.split('\n').slice(0, count);
-    return { output: lines.join('\n'), code: 0 };
+    if (files.length === 0) {
+      const lines = (stdin || '').replace(/\n$/, '').split('\n').slice(0, count);
+      return { output: lines.join('\n'), code: 0 };
+    }
+    if (files.length === 1) {
+      const lines = this.fs.readFile(files[0]).replace(/\n$/, '').split('\n').slice(0, count);
+      return { output: lines.join('\n'), code: 0 };
+    }
+    const sections = files.map(f => `==> ${f} <==\n` + this.fs.readFile(f).replace(/\n$/, '').split('\n').slice(0, count).join('\n'));
+    return { output: sections.join('\n\n'), code: 0 };
   }
 
   cmdTail(args, stdin) {
     let count = 10;
-    let file = null;
+    const files = [];
     for (let i = 0; i < args.length; i++) {
       if ((args[i] === '-n' || args[i] === '--lines') && args[i + 1]) {
         count = parseInt(args[++i], 10);
@@ -3293,19 +3523,22 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       } else if (args[i].startsWith('-n') && args[i].length > 2) {
         count = parseInt(args[i].slice(2), 10);
       } else if (!args[i].startsWith('-')) {
-        file = args[i];
+        files.push(args[i]);
       }
     }
-    const content = file ? this.fs.readFile(file) : stdin;
-    const lines = content.split('\n');
-    const start = Math.max(0, lines.length - count);
-    return { output: lines.slice(start).join('\n'), code: 0 };
+    const tailText = (text) => {
+      const lines = (text || '').replace(/\n$/, '').split('\n');
+      return lines.slice(Math.max(0, lines.length - count)).join('\n');
+    };
+    if (files.length === 0) return { output: tailText(stdin), code: 0 };
+    if (files.length === 1) return { output: tailText(this.fs.readFile(files[0])), code: 0 };
+    return { output: files.map(f => `==> ${f} <==\n` + tailText(this.fs.readFile(f))).join('\n\n'), code: 0 };
   }
 
   cmdCut(args, stdin) {
     let delim = '\t';
     let field = 1;
-    let file = null;
+    const files = [];
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
       if (a === '-d' && args[i + 1] !== undefined) {
@@ -3317,10 +3550,10 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       } else if (a.startsWith('-f') && a.length > 2) {
         field = parseInt(a.slice(2), 10);
       } else if (!a.startsWith('-')) {
-        file = a;
+        files.push(a);
       }
     }
-    const content = file ? this.fs.readFile(file) : stdin;
+    const content = files.length > 0 ? files.map(f => this.fs.readFile(f).replace(/\n$/, '')).join('\n') : (stdin || '').replace(/\n$/, '');
     const lines = content.split('\n').map(l => {
       const parts = l.split(delim);
       return parts[field - 1] !== undefined ? parts[field - 1] : l;
@@ -3361,13 +3594,13 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
   cmdSort(args, stdin) {
     let numeric = false;
     let reverse = false;
-    let file = null;
+    const files = [];
     for (const a of args) {
       if (a === '--numeric-sort' || (a.startsWith('-') && a.includes('n'))) numeric = true;
       if (a === '--reverse' || (a.startsWith('-') && a.includes('r'))) reverse = true;
-      if (!a.startsWith('-')) file = a;
+      if (!a.startsWith('-')) files.push(a);
     }
-    const content = file ? this.fs.readFile(file) : stdin;
+    const content = files.length > 0 ? files.map(f => this.fs.readFile(f)).join('\n') : stdin;
     const lines = content.split('\n').filter(l => l.length > 0);
     lines.sort((a, b) => {
       if (numeric) {
@@ -3382,12 +3615,12 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
   cmdUniq(args, stdin) {
     let count = false;
-    let file = null;
+    const files = [];
     for (const a of args) {
       if (a === '--count' || (a.startsWith('-') && a.includes('c'))) count = true;
-      if (!a.startsWith('-')) file = a;
+      if (!a.startsWith('-')) files.push(a);
     }
-    const content = file ? this.fs.readFile(file) : stdin;
+    const content = files.length > 0 ? files.map(f => this.fs.readFile(f)).join('\n') : stdin;
     const lines = content.split('\n').filter(Boolean);
     const result = [];
     let prev = null;
@@ -3415,24 +3648,47 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     let lines = false;
     let words = false;
     let chars = false;
-    let file = null;
+    const files = [];
     for (const a of args) {
       if (a === '--lines' || (a.startsWith('-') && a.includes('l'))) lines = true;
       if (a === '--words' || (a.startsWith('-') && a.includes('w'))) words = true;
       if (a === '--bytes' || a === '--chars' || (a.startsWith('-') && (a.includes('c') || a.includes('m')))) chars = true;
-      if (!a.startsWith('-')) file = a;
+      if (!a.startsWith('-')) files.push(a);
     }
-    const content = file ? this.fs.readFile(file) : stdin;
 
-    const lineArr = content.split('\n');
-    const lineCount = content.endsWith('\n') ? lineArr.length - 1 : lineArr.length;
-    const wordCount = content.split(/\s+/).filter(Boolean).length;
-    const charCount = content.length;
+    const calcCounts = (content) => {
+      const lineArr = content.split('\n');
+      const lineCount = content.endsWith('\n') ? lineArr.length - 1 : lineArr.length;
+      const wordCount = content.split(/\s+/).filter(Boolean).length;
+      const charCount = content.length;
+      return { lineCount, wordCount, charCount };
+    };
 
-    if (lines && !words && !chars) {
-      return { output: `${lineCount}${file ? ' ' + file : ''}`, code: 0 };
+    const formatRow = (c, label) => {
+      const suffix = label ? ' ' + label : '';
+      if (lines && !words && !chars) return `${c.lineCount}${suffix}`;
+      if (!lines && words && !chars) return `${c.wordCount}${suffix}`;
+      if (!lines && !words && chars) return `${c.charCount}${suffix}`;
+      return `  ${c.lineCount}  ${c.wordCount} ${c.charCount}${suffix}`;
+    };
+
+    if (files.length === 0) {
+      return { output: formatRow(calcCounts(stdin || ''), ''), code: 0 };
     }
-    return { output: `  ${lineCount}  ${wordCount} ${charCount}${file ? ' ' + file : ''}`, code: 0 };
+
+    const outRows = [];
+    let totL = 0, totW = 0, totC = 0;
+    for (const f of files) {
+      const c = calcCounts(this.fs.readFile(f));
+      totL += c.lineCount;
+      totW += c.wordCount;
+      totC += c.charCount;
+      outRows.push(formatRow(c, f));
+    }
+    if (files.length > 1) {
+      outRows.push(formatRow({ lineCount: totL, wordCount: totW, charCount: totC }, 'total'));
+    }
+    return { output: outRows.join('\n'), code: 0 };
   }
 
   cmdDiff(args) {
@@ -3601,6 +3857,27 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     return { output: '', code: 0 };
   }
 
+  cmdUmask(args) {
+    const clean = args.filter(a => a !== '-S');
+    const symbolic = args.includes('-S');
+    if (clean.length === 0) {
+      const val = this.fs.umask || '0022';
+      if (symbolic) {
+        const mask = parseInt(val, 8) & 0o777;
+        const perms = (~mask) & 0o777;
+        const fmt = (bits) => `${bits & 4 ? 'r' : ''}${bits & 2 ? 'w' : ''}${bits & 1 ? 'x' : ''}`;
+        return { output: `u=${fmt((perms >> 6) & 7)},g=${fmt((perms >> 3) & 7)},o=${fmt(perms & 7)}`, code: 0 };
+      }
+      return { output: val.padStart(4, '0'), code: 0 };
+    }
+    const raw = clean[0];
+    if (!/^[0-7]{3,4}$/.test(raw)) {
+      throw new Error(`umask: '${raw}': número octal inválido`);
+    }
+    this.fs.umask = raw.padStart(4, '0');
+    return { output: '', code: 0 };
+  }
+
   cmdChown(args) {
     let recursive = false;
     const nonOpts = [];
@@ -3709,28 +3986,38 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
     let isList = false;
     let isVerbose = false;
     let extractDir = null;
+    let tarName = null;
     const cleanArgs = [];
 
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
       if ((a === '-C' || a === '--directory') && args[i + 1]) {
         extractDir = args[++i];
-      } else if (a.startsWith('-') || (i === 0 && /^[cxtvzf]+$/.test(a))) {
+      } else if (a === '-f' || a === '--file') {
+        if (args[i + 1]) tarName = args[++i];
+      } else if (a.startsWith('-f') && a.length > 2) {
+        tarName = a.slice(2);
+      } else if (a.startsWith('-') || (i === 0 && /^[cxtvzfjp]+$/.test(a))) {
         if (a.includes('c')) isCreate = true;
         if (a.includes('x')) isExtract = true;
         if (a.includes('t')) isList = true;
         if (a.includes('v')) isVerbose = true;
+        if (a.includes('f') && args[i + 1] && !args[i + 1].startsWith('-')) {
+          tarName = args[++i];
+        }
       } else {
         cleanArgs.push(a);
       }
     }
 
-    const tarName = cleanArgs[0];
+    if (!tarName) tarName = cleanArgs.shift();
     if (!tarName) throw new Error('tar: você deve especificar uma das opções -Acdtrux');
 
     if (isCreate) {
-      const targets = cleanArgs.slice(1);
-      if (targets.length === 0) targets.push('documents');
+      const targets = cleanArgs;
+      if (targets.length === 0) {
+        throw new Error('tar: recusando-se covardemente a criar um arquivo-tar vazio');
+      }
       const entries = [];
       const filesData = [];
 
@@ -3756,6 +4043,9 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
       };
 
       for (const t of targets) {
+        if (!this.fs.getNode(t)) {
+          throw new Error(`tar: ${t}: Não foi possível stat: Arquivo ou diretório não encontrado`);
+        }
         collectEntries(t);
       }
 
@@ -3771,17 +4061,27 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
 
     if (isList) {
       const tarNode = this.fs.getNode(tarName);
-      const entries = (tarNode && tarNode.tarEntries) || ['documents/', 'documents/readme.txt', 'documents/notes.txt'];
+      if (!tarNode) {
+        throw new Error(`tar: ${tarName}: Não foi possível open: Arquivo ou diretório não encontrado`);
+      }
+      const entries = tarNode.tarEntries || ['documents/', 'documents/readme.txt', 'documents/notes.txt'];
       return { output: entries.join('\n'), code: 0 };
     }
 
     if (isExtract) {
       const tarNode = this.fs.getNode(tarName);
-      const entries = (tarNode && tarNode.tarEntries) || ['projects/', 'projects/test.sh'];
+      if (!tarNode) {
+        throw new Error(`tar: ${tarName}: Não foi possível open: Arquivo ou diretório não encontrado`);
+      }
+      const filesData = tarNode.tarFilesData || tarNode.filesData;
+      const entries = tarNode.tarEntries || ['projects/', 'projects/test.sh'];
       const baseDest = extractDir ? this.fs.resolvePath(extractDir) : this.fs.currentPath;
+      if (extractDir && !this.fs.getNode(baseDest)) {
+        throw new Error(`tar: ${extractDir}: Não foi possível chdir: Arquivo ou diretório não encontrado`);
+      }
 
-      if (tarNode && tarNode.tarFilesData) {
-        for (const item of tarNode.tarFilesData) {
+      if (filesData) {
+        for (const item of filesData) {
           const destPath = `${baseDest === '/' ? '' : baseDest}/${item.path.replace(/^\.?\//, '')}`;
           if (item.type === 'directory') {
             try { this.fs.createDirectory(destPath.replace(/\/$/, ''), true, item.permissions); } catch {}
@@ -4127,33 +4427,45 @@ ${h ? '24K' : '24'}\t.`,
     const content = files.length > 0 ? files.map(f => this.fs.readFile(f)).join('\n') : stdin;
     const lines = (content || '').replace(/\n$/, '').split('\n').filter(l => l.length > 0 || files.length === 0);
 
-    // Extrai filtro opcional (/regex/ ou condição de campo $N op VAL) antes de { ... }
+    // Extrai filtro opcional (/regex/ ou condição de campo $N op VAL) com ou sem { ... }
     let filterRegex = null;
     let fieldCond = null;
     let body = program.trim();
+    const buildFieldCond = (colStr, op, rawValRaw) => {
+      const colIdx = parseInt(colStr, 10);
+      const rawVal = rawValRaw.trim().replace(/^['"]|['"]$/g, '');
+      return (fields, line) => {
+        const left = colIdx === 0 ? line : (fields[colIdx - 1] !== undefined ? fields[colIdx - 1] : '');
+        const numL = Number(left);
+        const numR = Number(rawVal);
+        const bothNum = !Number.isNaN(numL) && !Number.isNaN(numR) && left !== '' && rawVal !== '';
+        if (op === '==') return bothNum ? numL === numR : left === rawVal;
+        if (op === '!=') return bothNum ? numL !== numR : left !== rawVal;
+        if (op === '>') return bothNum ? numL > numR : left > rawVal;
+        if (op === '<') return bothNum ? numL < numR : left < rawVal;
+        if (op === '>=') return bothNum ? numL >= numR : left >= rawVal;
+        if (op === '<=') return bothNum ? numL <= numR : left <= rawVal;
+        return false;
+      };
+    };
+
     const filterMatch = body.match(/^\/(.+?)\/\s*\{(.*)\}$/s);
-    const condMatch = body.match(/^\$(\d+)\s*(==|!=|>=|<=|>|<)\s*(.+?)\s*\{(.*)\}$/s);
+    const condMatch = body.match(/^\$(\d+)\s*(==|!=|>=|<=|>|<)\s*([^{}]+?)\s*\{(.*)\}$/s);
+    const filterOnlyMatch = body.match(/^\/(.+?)\/$/s);
+    const condOnlyMatch = body.match(/^\$(\d+)\s*(==|!=|>=|<=|>|<)\s*([^{}]+?)$/s);
+
     if (filterMatch) {
       filterRegex = new RegExp(filterMatch[1]);
       body = filterMatch[2].trim();
     } else if (condMatch) {
-      const colIdx = parseInt(condMatch[1], 10);
-      const op = condMatch[2];
-      const rawVal = condMatch[3].trim().replace(/^['"]|['"]$/g, '');
-      fieldCond = (fields, line) => {
-        const left = colIdx === 0 ? line : (fields[colIdx - 1] !== undefined ? fields[colIdx - 1] : '');
-        const numL = Number(left);
-        const numR = Number(rawVal);
-        const bothNum = !Number.isNaN(numL) && !Number.isNaN(numR) && rawVal !== '';
-        if (op === '==') return bothNum ? numL === numR : left === rawVal;
-        if (op === '!=') return bothNum ? numL !== numR : left !== rawVal;
-        if (op === '>') return numL > numR;
-        if (op === '<') return numL < numR;
-        if (op === '>=') return numL >= numR;
-        if (op === '<=') return numL <= numR;
-        return false;
-      };
+      fieldCond = buildFieldCond(condMatch[1], condMatch[2], condMatch[3]);
       body = condMatch[4].trim();
+    } else if (filterOnlyMatch) {
+      filterRegex = new RegExp(filterOnlyMatch[1]);
+      body = 'print $0';
+    } else if (condOnlyMatch) {
+      fieldCond = buildFieldCond(condOnlyMatch[1], condOnlyMatch[2], condOnlyMatch[3]);
+      body = 'print $0';
     } else if (body.startsWith('{') && body.endsWith('}')) {
       body = body.slice(1, -1).trim();
     }
@@ -4193,7 +4505,8 @@ ${h ? '24K' : '24'}\t.`,
 
         const evalToken = (tok) => {
           if ((tok.startsWith('"') && tok.endsWith('"')) || (tok.startsWith("'") && tok.endsWith("'"))) {
-            return tok.slice(1, -1);
+            const inner = tok.slice(1, -1);
+            return tok.startsWith('"') ? inner.replace(/\\t/g, '\t').replace(/\\n/g, '\n') : inner;
           }
           if (tok === 'NR') return String(nr);
           if (tok === 'NF') return String(nf);
@@ -4210,7 +4523,26 @@ ${h ? '24K' : '24'}\t.`,
           });
         };
 
-        outLines.push(parts.map(evalToken).join(' '));
+        const evalPart = (part) => {
+          const subToks = [];
+          let c = '';
+          let q = null;
+          for (let i = 0; i < part.length; i++) {
+            const ch = part[i];
+            if (ch === '"' || ch === "'") {
+              q = q === ch ? null : (q || ch);
+              c += ch;
+            } else if (/\s/.test(ch) && !q) {
+              if (c) { subToks.push(c); c = ''; }
+            } else {
+              c += ch;
+            }
+          }
+          if (c) subToks.push(c);
+          return subToks.length > 1 ? subToks.map(evalToken).join('') : evalToken(part);
+        };
+
+        outLines.push(parts.map(evalPart).join(' '));
       }
     });
 
@@ -4417,8 +4749,23 @@ ${h ? '24K' : '24'}\t.`,
     if (!this.fs.sudoMode) {
       return { output: 'useradd: Permissão negada.\nuseradd: não foi possível travar /etc/passwd; tente novamente com sudo.', code: 1, type: 'error' };
     }
-    const createHome = args.includes('-m') || args.includes('--create-home');
-    const username = args.find(a => !a.startsWith('-'));
+    let createHome = false;
+    let shell = '/bin/bash';
+    let homeDir = null;
+    let uidOpt = null;
+    let groupsSpec = null;
+    let username = null;
+    const skipValueFlags = new Set(['-b', '--base-dir', '-c', '--comment', '-e', '--expiredate', '-f', '--inactive', '-g', '--gid', '-k', '--skel', '-K', '--key', '-p', '--password', '-R', '--root', '-P', '--prefix']);
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === '-m' || a === '--create-home') createHome = true;
+      else if ((a === '-s' || a === '--shell') && args[i + 1]) shell = args[++i];
+      else if ((a === '-d' || a === '--home-dir') && args[i + 1]) homeDir = args[++i];
+      else if ((a === '-u' || a === '--uid') && args[i + 1]) uidOpt = parseInt(args[++i], 10);
+      else if ((a === '-G' || a === '--groups') && args[i + 1]) groupsSpec = args[++i];
+      else if (skipValueFlags.has(a) && args[i + 1] !== undefined) i++;
+      else if (!a.startsWith('-')) username = a;
+    }
     if (!username) {
       return { output: 'Uso: useradd [opções] LOGIN', code: 2, type: 'error' };
     }
@@ -4426,16 +4773,31 @@ ${h ? '24K' : '24'}\t.`,
     if (passwdContent.split('\n').some(l => l.startsWith(`${username}:`))) {
       return { output: `useradd: usuário '${username}' já existe`, code: 9, type: 'error' };
     }
-    const uid = 1001 + passwdContent.split('\n').filter(Boolean).length;
-    this.fs.writeFile('/etc/passwd', passwdContent.trimEnd() + `\n${username}:x:${uid}:${uid}::/home/${username}:/bin/bash\n`);
+    const uid = Number.isFinite(uidOpt) ? uidOpt : (1001 + passwdContent.split('\n').filter(Boolean).length);
+    const targetHome = homeDir || `/home/${username}`;
+    this.fs.writeFile('/etc/passwd', passwdContent.trimEnd() + `\n${username}:x:${uid}:${uid}::${targetHome}:${shell}\n`);
     const groupContent = this.fs.readFile('/etc/group');
     if (!groupContent.split('\n').some(l => l.startsWith(`${username}:`))) {
       this.fs.writeFile('/etc/group', groupContent.trimEnd() + `\n${username}:x:${uid}:\n`);
     }
+    if (groupsSpec) {
+      const targetGroups = groupsSpec.split(',').map(g => g.trim()).filter(Boolean);
+      const updated = this.fs.readFile('/etc/group').split('\n').filter(Boolean).map(line => {
+        const parts = line.split(':');
+        if (targetGroups.includes(parts[0])) {
+          const members = (parts[3] || '').split(',').filter(Boolean);
+          if (!members.includes(username)) members.push(username);
+          parts[3] = members.join(',');
+          return parts.join(':');
+        }
+        return line;
+      });
+      this.fs.writeFile('/etc/group', updated.join('\n') + '\n');
+    }
     if (createHome) {
       try {
-        this.fs.createDirectory(`/home/${username}`, true);
-        const homeNode = this.fs.getNode(`/home/${username}`);
+        this.fs.createDirectory(targetHome, true, 'rwxr-xr-x', username);
+        const homeNode = this.fs.getNode(targetHome);
         if (homeNode) {
           homeNode.owner = username;
           homeNode.group = username;
@@ -4449,7 +4811,15 @@ ${h ? '24K' : '24'}\t.`,
     if (!this.fs.sudoMode) {
       return { output: 'groupadd: Permissão negada.\ngroupadd: não foi possível travar /etc/group; tente novamente com sudo.', code: 1, type: 'error' };
     }
-    const groupName = args.find(a => !a.startsWith('-'));
+    let gidOpt = null;
+    let groupName = null;
+    const skipValueFlags = new Set(['-K', '--key', '-p', '--password', '-R', '--root', '-P', '--prefix']);
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if ((a === '-g' || a === '--gid') && args[i + 1]) gidOpt = parseInt(args[++i], 10);
+      else if (skipValueFlags.has(a) && args[i + 1] !== undefined) i++;
+      else if (!a.startsWith('-')) groupName = a;
+    }
     if (!groupName) {
       return { output: 'Uso: groupadd [opções] GRUPO', code: 2, type: 'error' };
     }
@@ -4457,7 +4827,7 @@ ${h ? '24K' : '24'}\t.`,
     if (groupContent.split('\n').some(l => l.startsWith(`${groupName}:`))) {
       return { output: `groupadd: grupo '${groupName}' já existe`, code: 9, type: 'error' };
     }
-    const gid = 1050 + groupContent.split('\n').filter(Boolean).length;
+    const gid = Number.isFinite(gidOpt) ? gidOpt : (1050 + groupContent.split('\n').filter(Boolean).length);
     this.fs.writeFile('/etc/group', groupContent.trimEnd() + `\n${groupName}:x:${gid}:\n`);
     return { output: '', code: 0 };
   }
@@ -4469,11 +4839,13 @@ ${h ? '24K' : '24'}\t.`,
     let append = false;
     let groupsSpec = null;
     let username = null;
+    const skipValueFlags = new Set(['-c', '--comment', '-d', '--home', '-e', '--expiredate', '-f', '--inactive', '-g', '--gid', '-l', '--login', '-p', '--password', '-R', '--root', '-s', '--shell', '-u', '--uid']);
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
       if (a === '-a') append = true;
       else if (a === '-aG' && args[i + 1]) { append = true; groupsSpec = args[++i]; }
       else if ((a === '-G' || a === '--groups') && args[i + 1]) { groupsSpec = args[++i]; }
+      else if (skipValueFlags.has(a) && args[i + 1] !== undefined) i++;
       else if (!a.startsWith('-')) { username = a; }
     }
     if (!username) {
@@ -4510,7 +4882,14 @@ ${h ? '24K' : '24'}\t.`,
   }
 
   cmdPasswd(args) {
-    const targetUser = args.find(a => !a.startsWith('-')) || (this.fs.sudoMode ? 'root' : 'user');
+    let targetUser = null;
+    const skipValueFlags = new Set(['-n', '--mindays', '-x', '--maxdays', '-w', '--warndays', '-i', '--inactive', '-R', '--root']);
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (skipValueFlags.has(a) && args[i + 1] !== undefined) i++;
+      else if (!a.startsWith('-')) { targetUser = a; break; }
+    }
+    targetUser = targetUser || (this.fs.sudoMode ? 'root' : 'user');
     const passwdContent = this.fs.readFile('/etc/passwd');
     if (!passwdContent.split('\n').some(l => l.startsWith(`${targetUser}:`))) {
       return { output: `passwd: usuário '${targetUser}' não existe`, code: 1, type: 'error' };
@@ -4525,8 +4904,14 @@ ${h ? '24K' : '24'}\t.`,
     if (!this.fs.sudoMode) {
       return { output: 'userdel: Permissão negada.\nuserdel: não foi possível travar /etc/passwd; tente novamente com sudo.', code: 1, type: 'error' };
     }
-    const removeHome = args.includes('-r') || args.includes('--remove');
-    const username = args.find(a => !a.startsWith('-'));
+    let removeHome = false;
+    let username = null;
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (a === '-r' || a === '--remove') removeHome = true;
+      else if ((a === '-R' || a === '--root' || a === '-P' || a === '--prefix') && args[i + 1]) i++;
+      else if (!a.startsWith('-')) username = a;
+    }
     if (!username) {
       return { output: 'Uso: userdel [opções] LOGIN', code: 2, type: 'error' };
     }
@@ -4634,7 +5019,8 @@ sda      8:0    0   52G  0 disk
   cmdSystemctl(args) {
     const clean = args.filter(a => !a.startsWith('-'));
     const action = clean[0] || 'list-units';
-    const rawTarget = (clean[1] || '').replace(/\.service$/, '');
+    const targetName = (clean[1] || '').replace(/\.service$/, '');
+    const serviceKey = targetName === 'sshd' ? 'ssh' : targetName;
 
     if (action === 'list-units') {
       const lines = [
@@ -4648,19 +5034,14 @@ sda      8:0    0   52G  0 disk
       return { output: lines.join('\n'), code: 0 };
     }
 
-    if (!rawTarget) {
+    if (!targetName) {
       return { output: `systemctl: nome da unidade necessário para ${action}`, code: 1, type: 'error' };
     }
 
-    if (!this.services[rawTarget]) {
-      this.services[rawTarget] = {
-        active: false,
-        enabled: false,
-        pid: 312,
-        desc: `${rawTarget} daemon service`
-      };
+    const svc = this.services[serviceKey];
+    if (!svc) {
+      return { output: `Unit ${targetName}.service could not be found.`, code: 4, type: 'error' };
     }
-    const svc = this.services[rawTarget];
 
     if (action === 'is-active') {
       return { output: svc.active ? 'active' : 'inactive', code: svc.active ? 0 : 3 };
@@ -4673,36 +5054,51 @@ sda      8:0    0   52G  0 disk
       const stateStr = svc.active ? 'active (running)' : 'inactive (dead)';
       const enStr = svc.enabled ? 'enabled' : 'disabled';
       return {
-        output: `${dot} ${rawTarget}.service - ${svc.desc}
-     Loaded: loaded (/lib/systemd/system/${rawTarget}.service; ${enStr}; preset: enabled)
+        output: `${dot} ${targetName}.service - ${svc.desc}
+     Loaded: loaded (/lib/systemd/system/${targetName}.service; ${enStr}; preset: enabled)
      Active: ${stateStr} since Thu 2026-01-15 07:31:02 UTC; 3h 14min ago
-   Main PID: ${svc.active ? svc.pid : 0} (${rawTarget})
+   Main PID: ${svc.active ? svc.pid : 0} (${targetName})
       Tasks: ${svc.active ? 2 : 0} (limit: 4658)
      Memory: ${svc.active ? '8.2M' : '0B'}
         CPU: 120ms
-     CGroup: /system.slice/${rawTarget}.service
+     CGroup: /system.slice/${targetName}.service
 
-Jan 15 07:31:01 penguin-gym systemd[1]: Starting ${rawTarget}.service - ${svc.desc}...
-Jan 15 07:31:02 penguin-gym systemd[1]: Started ${rawTarget}.service - ${svc.desc}.`,
+Jan 15 07:31:01 penguin-gym systemd[1]: Starting ${targetName}.service - ${svc.desc}...
+Jan 15 07:31:02 penguin-gym systemd[1]: Started ${targetName}.service - ${svc.desc}.`,
         code: svc.active ? 0 : 3
       };
     }
 
     if (['start', 'stop', 'restart', 'reload', 'enable', 'disable'].includes(action)) {
+      if (!this.fs.sudoMode) {
+        return {
+          output: `Failed to ${action} ${targetName}.service: Access denied\nSee system logs and 'systemctl status ${targetName}.service' for details.`,
+          code: 1,
+          type: 'error'
+        };
+      }
       if (action === 'start' || action === 'restart' || action === 'reload') {
         svc.active = true;
-        if (rawTarget === 'nginx') {
+        if (serviceKey === 'nginx') {
           this.killedProcesses.delete('123');
           this.killedProcesses.delete('124');
+        } else if (serviceKey === 'ssh') {
+          this.killedProcesses.delete('88');
+        } else if (serviceKey === 'cron') {
+          this.killedProcesses.delete('74');
+        } else if (serviceKey === 'docker') {
+          this.killedProcesses.delete('210');
+        } else if (serviceKey === 'postgresql') {
+          this.killedProcesses.delete('280');
         }
       } else if (action === 'stop') {
         svc.active = false;
       } else if (action === 'enable') {
         svc.enabled = true;
-        return { output: `Created symlink /etc/systemd/system/multi-user.target.wants/${rawTarget}.service → /lib/systemd/system/${rawTarget}.service.`, code: 0 };
+        return { output: `Created symlink /etc/systemd/system/multi-user.target.wants/${targetName}.service → /lib/systemd/system/${targetName}.service.`, code: 0 };
       } else if (action === 'disable') {
         svc.enabled = false;
-        return { output: `Removed "/etc/systemd/system/multi-user.target.wants/${rawTarget}.service".`, code: 0 };
+        return { output: `Removed "/etc/systemd/system/multi-user.target.wants/${targetName}.service".`, code: 0 };
       }
       return { output: '', code: 0 };
     }
@@ -4721,9 +5117,16 @@ Jan 15 07:31:02 penguin-gym systemd[1]: Started ${rawTarget}.service - ${svc.des
   cmdJournalctl(args) {
     let unit = null;
     let linesCount = 10;
+    let reverse = false;
     for (let i = 0; i < args.length; i++) {
-      if (args[i] === '-u' && args[i + 1]) unit = args[++i].replace(/\.service$/, '');
-      else if (args[i] === '-n' && args[i + 1]) linesCount = parseInt(args[++i], 10);
+      const a = args[i];
+      if (a === '-u' && args[i + 1]) unit = args[++i].replace(/\.service$/, '');
+      else if (a.startsWith('-u=') || a.startsWith('--unit=')) unit = a.split('=')[1].replace(/\.service$/, '');
+      else if (a.startsWith('-u') && a.length > 2) unit = a.slice(2).replace(/\.service$/, '');
+      else if (a === '-n' && args[i + 1]) linesCount = Math.max(1, parseInt(args[++i], 10) || 10);
+      else if (/^-n\d+$/.test(a)) linesCount = Math.max(1, parseInt(a.slice(2), 10) || 10);
+      else if (a.startsWith('--lines=')) linesCount = Math.max(1, parseInt(a.split('=')[1], 10) || 10);
+      else if (a === '-r' || a === '--reverse') reverse = true;
     }
     const allLogs = [
       'Jan 15 07:31:00 penguin-gym kernel: Linux version 6.1.0-21-amd64 (debian-kernel@lists.debian.org)',
@@ -4736,7 +5139,9 @@ Jan 15 07:31:02 penguin-gym systemd[1]: Started ${rawTarget}.service - ${svc.des
       'Jan 15 09:30:00 penguin-gym sudo[412]:     user : TTY=pts/0 ; PWD=/home/user ; USER=root ; COMMAND=/usr/bin/apt update'
     ];
     const filtered = unit ? allLogs.filter(l => l.toLowerCase().includes(unit.toLowerCase())) : allLogs;
-    return { output: filtered.slice(-linesCount).join('\n'), code: 0 };
+    const sliced = filtered.slice(-linesCount);
+    if (reverse) sliced.reverse();
+    return { output: sliced.join('\n'), code: 0 };
   }
 
   cmdCrontab(args) {
@@ -4909,13 +5314,24 @@ Lendo informação de estado... Pronto
   }
 
   cmdDpkg(args) {
-    if (args.includes('-l') || args.length === 0) {
+    if (args.includes('-l') || args.includes('--list') || args.length === 0) {
+      const filters = args.filter(a => !a.startsWith('-'));
       const header = `Desired=Unknown/Install/Remove/Purge/Hold
 | Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
 |/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
 ||/ Nome                Versão              Arquitetura  Descrição
 +++-===================-===================-============-=============================================`;
-      const rows = Array.from(this.installedPackages).sort().map(pkg => {
+      const pkgs = Array.from(this.installedPackages).sort().filter(pkg => {
+        if (filters.length === 0) return true;
+        return filters.some(f => {
+          const clean = f.replace(/\*/g, '');
+          return f.includes('*') ? pkg.includes(clean) : (pkg === f || pkg.includes(f));
+        });
+      });
+      if (pkgs.length === 0 && filters.length > 0) {
+        return { output: `dpkg-query: nenhum pacote encontrado combinando com ${filters[0]}`, code: 1, type: 'error' };
+      }
+      const rows = pkgs.map(pkg => {
         return `ii  ${pkg.padEnd(19)} 1.0-deb12u1         amd64        Utilitário do sistema GNU/Linux (${pkg})`;
       });
       return { output: [header, ...rows].join('\n'), code: 0 };
@@ -4982,8 +5398,11 @@ lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
     let count = 4;
     let host = null;
     for (let i = 0; i < args.length; i++) {
-      if (args[i] === '-c' && args[i + 1]) count = Math.min(10, Math.max(1, parseInt(args[++i], 10) || 4));
-      else if (!args[i].startsWith('-')) host = args[i];
+      const a = args[i];
+      if (a === '-c' && args[i + 1]) count = Math.min(10, Math.max(1, parseInt(args[++i], 10) || 4));
+      else if (/^-c\d+$/.test(a)) count = Math.min(10, Math.max(1, parseInt(a.slice(2), 10) || 4));
+      else if ((a === '-W' || a === '-w' || a === '-i' || a === '-s' || a === '-I') && args[i + 1]) i++;
+      else if (!a.startsWith('-')) host = a;
     }
     if (!host) return { output: 'ping: erro de uso: Endereço de destino obrigatório', code: 1, type: 'error' };
     const ip = host === 'localhost' ? '127.0.0.1' : (/^\d+\.\d+\.\d+\.\d+$/.test(host) ? host : '93.184.216.34');
@@ -5018,15 +5437,54 @@ lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
     let bodyData = null;
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
-      if (a === '-I' || a === '--head') headOnly = true;
-      else if (a === '-o' && args[i + 1]) outFile = args[++i];
-      else if (a === '-O') outFile = '__AUTO__';
-      else if ((a === '-X' || a === '--request') && args[i + 1]) method = args[++i].toUpperCase();
-      else if ((a === '-d' || a === '--data') && args[i + 1]) { bodyData = args[++i]; if (method === 'GET') method = 'POST'; }
-      else if ((a === '-H' || a === '--header') && args[i + 1]) i++;
-      else if (!a.startsWith('-')) url = a;
+      if (a === '--head') headOnly = true;
+      else if (a === '-o' || a === '--output') { if (args[i + 1]) outFile = args[++i]; }
+      else if (a.startsWith('-o') && a.length > 2) outFile = a.slice(2);
+      else if (a === '--remote-name') outFile = '__AUTO__';
+      else if (a === '-X' || a === '--request') { if (args[i + 1]) method = args[++i].toUpperCase(); }
+      else if (a.startsWith('-X') && a.length > 2) method = a.slice(2).toUpperCase();
+      else if (a === '-d' || a === '--data' || a === '--data-raw') {
+        if (args[i + 1] !== undefined) {
+          bodyData = args[++i];
+          if (method === 'GET') method = 'POST';
+        }
+      } else if (a.startsWith('-d') && a.length > 2) {
+        bodyData = a.slice(2);
+        if (method === 'GET') method = 'POST';
+      } else if ((a === '-H' || a === '--header') && args[i + 1] !== undefined) {
+        i++;
+      } else if (a.startsWith('-') && !a.startsWith('--')) {
+        if (a.includes('I')) headOnly = true;
+        if (a.includes('O')) outFile = '__AUTO__';
+      } else if (!a.startsWith('-')) {
+        url = a;
+      }
     }
     if (!url) return { output: 'curl: tente \'curl --help\' ou \'curl --manual\' para mais informações', code: 2, type: 'error' };
+
+    const urlMatch = url.match(/^(?:https?:\/\/)?([^/:]+)(?::(\d+))?/i);
+    const host = urlMatch ? urlMatch[1].toLowerCase() : '';
+    const port = (urlMatch && urlMatch[2]) ? urlMatch[2] : (url.startsWith('https://') ? '443' : '80');
+    if ((host === 'localhost' || host === '127.0.0.1') && port === '80') {
+      if (!this.services.nginx.active || this.killedProcesses.has('123')) {
+        return {
+          output: `curl: (7) Failed to connect to ${host} port 80 after 0 ms: Couldn't connect to server`,
+          code: 7,
+          type: 'error'
+        };
+      }
+      if (this.ufwState.enabled) {
+        const denied = this.ufwState.rules.some(r => /^(80(\/tcp)?|http)\s+DENY/i.test(r.trim()));
+        const allowed = this.ufwState.rules.some(r => /^(80(\/tcp)?|http)\s+ALLOW/i.test(r.trim()));
+        if (denied || !allowed) {
+          return {
+            output: `curl: (7) Failed to connect to ${host} port 80 after 0 ms: Connection timed out`,
+            code: 7,
+            type: 'error'
+          };
+        }
+      }
+    }
 
     const headers = `HTTP/1.1 ${method === 'POST' ? '201 Created' : '200 OK'}
 Server: nginx/1.22.1
@@ -5101,23 +5559,25 @@ ${filename}                  100%[=====================================>]      $
   }
 
   cmdNetstat(cmd, args) {
+    const sshUp = this.services.ssh.active && !this.killedProcesses.has('88');
+    const nginxUp = this.services.nginx.active && !this.killedProcesses.has('123');
+    const pgUp = this.services.postgresql.active && !this.killedProcesses.has('280');
+
     if (cmd === 'ss') {
-      return {
-        output: `Netid  State   Recv-Q  Send-Q   Local Address:Port    Peer Address:Port  Process
-tcp    LISTEN  0       128            0.0.0.0:22           0.0.0.0:*      users:(("sshd",pid=88,fd=3))
-tcp    LISTEN  0       511            0.0.0.0:80           0.0.0.0:*      users:(("nginx",pid=123,fd=6))
-tcp    LISTEN  0       4096         127.0.0.1:5432         0.0.0.0:*      users:(("postgres",pid=280,fd=5))`,
-        code: 0
-      };
+      const rows = ['Netid  State   Recv-Q  Send-Q   Local Address:Port    Peer Address:Port  Process'];
+      if (sshUp) rows.push('tcp    LISTEN  0       128            0.0.0.0:22           0.0.0.0:*      users:(("sshd",pid=88,fd=3))');
+      if (nginxUp) rows.push('tcp    LISTEN  0       511            0.0.0.0:80           0.0.0.0:*      users:(("nginx",pid=123,fd=6))');
+      if (pgUp) rows.push('tcp    LISTEN  0       4096         127.0.0.1:5432         0.0.0.0:*      users:(("postgres",pid=280,fd=5))');
+      return { output: rows.join('\n'), code: 0 };
     }
-    return {
-      output: `Conexões Internet Ativas (somente servidores)
-Proto Recv-Q Send-Q Endereço Local          Endereço Remoto         Estado      PID/Program name
-tcp        0      0 0.0.0.0:22              0.0.0.0:*               OUÇA        88/sshd: /usr/sbin
-tcp        0      0 0.0.0.0:80              0.0.0.0:*               OUÇA        123/nginx: master
-tcp        0      0 127.0.0.1:5432          0.0.0.0:*               OUÇA        280/postgres`,
-      code: 0
-    };
+    const rows = [
+      'Conexões Internet Ativas (somente servidores)',
+      'Proto Recv-Q Send-Q Endereço Local          Endereço Remoto         Estado      PID/Program name'
+    ];
+    if (sshUp) rows.push('tcp        0      0 0.0.0.0:22              0.0.0.0:*               OUÇA        88/sshd: /usr/sbin');
+    if (nginxUp) rows.push('tcp        0      0 0.0.0.0:80              0.0.0.0:*               OUÇA        123/nginx: master');
+    if (pgUp) rows.push('tcp        0      0 127.0.0.1:5432          0.0.0.0:*               OUÇA        280/postgres');
+    return { output: rows.join('\n'), code: 0 };
   }
 
   cmdDig(args) {
@@ -5159,9 +5619,29 @@ Address: 93.184.216.34`,
   }
 
   cmdNc(args) {
-    const clean = args.filter(a => !a.startsWith('-'));
+    const clean = [];
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if ((a === '-w' || a === '-p' || a === '-s') && args[i + 1]) i++;
+      else if (!a.startsWith('-')) clean.push(a);
+    }
     const host = clean[0] || 'localhost';
     const port = clean[1] || '80';
+    const lowerHost = host.toLowerCase();
+    if (lowerHost === 'localhost' || lowerHost === '127.0.0.1') {
+      const portMap = {
+        '22': this.services.ssh.active && !this.killedProcesses.has('88'),
+        '80': this.services.nginx.active && !this.killedProcesses.has('123'),
+        '5432': this.services.postgresql.active && !this.killedProcesses.has('280')
+      };
+      if (!portMap[String(port)]) {
+        return {
+          output: `nc: connect to ${host} (127.0.0.1) port ${port} (tcp) failed: Connection refused`,
+          code: 1,
+          type: 'error'
+        };
+      }
+    }
     return {
       output: `Connection to ${host} (127.0.0.1) ${port} port [tcp/*] succeeded!`,
       code: 0
@@ -5257,17 +5737,25 @@ Address: 93.184.216.34`,
 
   cmdJq(args, stdin) {
     const clean = args.filter(a => !a.startsWith('-'));
-    const filter = clean[0] || '.';
-    const file = clean[1];
+    let filter = clean[0] || '.';
+    let file = clean[1];
+    if (!file && clean.length === 1 && !filter.startsWith('.') && this.fs.getNode(filter)) {
+      file = filter;
+      filter = '.';
+    }
     const raw = file ? this.fs.readFile(file) : stdin;
     try {
       const parsed = JSON.parse(raw);
       if (filter === '.' || !filter.startsWith('.')) {
         return { output: JSON.stringify(parsed, null, 2), code: 0 };
       }
-      const key = filter.slice(1);
-      const val = parsed[key];
-      return { output: typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val), code: 0 };
+      const keys = filter.slice(1).split('.').filter(Boolean);
+      let val = parsed;
+      for (const k of keys) {
+        val = (val !== null && val !== undefined) ? val[k] : undefined;
+      }
+      if (val === undefined) val = null;
+      return { output: typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val), code: 0 };
     } catch {
       return { output: 'jq: parse error: Invalid JSON literal', code: 4, type: 'error' };
     }

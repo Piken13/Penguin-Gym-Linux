@@ -197,6 +197,15 @@ class App {
       if (countEl) countEl.textContent = `${completedInCat}/${lessons.length}`;
     }
 
+    if (lessons.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'lesson-empty-state';
+      empty.textContent = this.searchQuery.trim()
+        ? `Nenhuma lição encontrada para "${this.searchQuery.trim()}".`
+        : 'Nenhuma lição disponível nesta trilha.';
+      container.appendChild(empty);
+    }
+
     lessons.forEach(lesson => {
       const isCompleted = this.completedLessons.has(lesson.id);
       const isActive = this.currentLesson && this.currentLesson.id === lesson.id;
@@ -205,6 +214,7 @@ class App {
       item.className = `lesson-item ${isCompleted ? 'completed' : ''} ${isActive ? 'active' : ''}`;
       item.dataset.lessonId = lesson.id;
       item.tabIndex = 0;
+      item.setAttribute('role', 'button');
 
       const left = document.createElement('div');
       left.className = 'lesson-left';
@@ -228,11 +238,25 @@ class App {
       item.appendChild(left);
       item.appendChild(diff);
 
-      item.addEventListener('click', () => {
-        if (lesson.category !== this.currentCategory && !this.searchQuery.trim()) {
-          this.setActiveTab(lesson.category, false);
+      const activate = () => {
+        if (lesson.category !== this.currentCategory) {
+          this.currentCategory = lesson.category;
+          document.querySelectorAll('.cat-pill-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.category === lesson.category);
+          });
+          if (!this.searchQuery.trim()) {
+            this.renderLessonLists();
+          }
         }
         this.selectLesson(lesson);
+      };
+
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activate();
+        }
       });
 
       container.appendChild(item);
@@ -243,46 +267,8 @@ class App {
 
   prepareCommandEngineForLesson(lessonId) {
     if (!this.commandEngine || !lessonId) return;
-    this.commandEngine.killedProcesses.clear();
-    this.commandEngine.backgroundJobs = [];
-
-    if (lessonId === 'bash-history-exec') {
-      const lastCmd = this.commandEngine.history[this.commandEngine.history.length - 1];
-      if (!lastCmd || lastCmd.startsWith('unalias') || lastCmd === '!!') {
-        this.commandEngine.history.push('echo "Linux"');
-      }
-    }
-    if (lessonId === 'bash-alias-remove') {
-      this.commandEngine.aliases['c'] = 'clear';
-    }
-    if (lessonId === 'sys-apt-remove' || lessonId === 'sys-apt-purge') {
-      this.commandEngine.installedPackages.add('cowsay');
-      const prevSudo = this.fs.sudoMode;
-      this.fs.sudoMode = true;
-      try {
-        if (!this.fs.getNode('/usr/bin/cowsay')) {
-          this.fs.createFile('/usr/bin/cowsay', '#!/bin/sh\n# Binário do pacote cowsay\n', 'root', 'rwxr-xr-x');
-        }
-      } finally {
-        this.fs.sudoMode = prevSudo;
-      }
-    }
-    if (lessonId === 'sys-systemctl-stop' || lessonId === 'sys-systemctl-disable') {
-      this.commandEngine.services.nginx.active = true;
-      this.commandEngine.services.nginx.enabled = true;
-    }
-    if (lessonId === 'sys-systemctl-start' || lessonId === 'inc-postgresql-down') {
-      this.commandEngine.services.postgresql.active = false;
-      this.commandEngine.services.postgresql.enabled = false;
-    }
-    if (lessonId === 'sys-crontab-list' || lessonId === 'sys-crontab-remove' || lessonId === 'sys-crontab-edit') {
-      this.commandEngine.userCrontab = '# m h  dom mon dow   command\n0 3 * * * /usr/local/bin/backup.sh\n';
-    }
-    if (lessonId === 'net-ufw-delete' || lessonId === 'net-ufw-disable') {
-      this.commandEngine.ufwState.enabled = true;
-      if (!this.commandEngine.ufwState.rules.some(r => r.startsWith('80/tcp'))) {
-        this.commandEngine.ufwState.rules.push('80/tcp                     ALLOW IN    Anywhere');
-      }
+    if (typeof this.commandEngine.prepareForLesson === 'function') {
+      this.commandEngine.prepareForLesson(lessonId);
     }
   }
 
@@ -290,6 +276,7 @@ class App {
     this.currentLesson = lesson;
     this.lessonSessionHistory = [];
     this.hideCompletionBar();
+    document.getElementById('guiFilePreview')?.classList.add('d-none');
 
     // Limpa overlays (nano/less), prompt sqlite>, Ctrl+R e restaura sessão de usuário padrão
     if (this.terminal && typeof this.terminal.resetInteractiveState === 'function') {
@@ -298,6 +285,9 @@ class App {
 
     // Prepara o sistema de arquivos e ferramentas (com limpeza automática se ativada)
     const forceReset = !!this.autoCleanOnLessonChange;
+    if (forceReset && this.commandEngine) {
+      this.commandEngine.resetEnvironment(false);
+    }
     this.fs.setupForLesson(lesson.id, this.git, this.docker, this.sql, forceReset);
     this.prepareCommandEngineForLesson(lesson.id);
 
@@ -341,10 +331,10 @@ class App {
     const answerCode = document.getElementById('answerCodeText');
 
     if (titleEl) titleEl.textContent = lesson.title;
-    if (descEl) descEl.innerHTML = this.escapeHtml(lesson.description).replace(/\n/g, '<br>');
+    if (descEl) descEl.innerHTML = this.formatInlineMarkdown(lesson.description);
 
     if (hintEl) {
-      hintEl.innerHTML = '💡 <strong>Dica:</strong> ' + this.escapeHtml(lesson.hint).replace(/\n/g, '<br>');
+      hintEl.innerHTML = '💡 <strong>Dica:</strong> ' + this.formatInlineMarkdown(lesson.hint);
       hintEl.classList.add('d-none');
     }
 
@@ -377,7 +367,7 @@ class App {
 
     this.terminal.writeLine(`<div class="terminal-lesson-banner">
       <span class="banner-title">🎯 Lição #${globalIdx + 1}: ${this.escapeHtml(lesson.title)}</span><br>
-      <span class="banner-desc">${this.escapeHtml(lesson.description)}</span>
+      <span class="banner-desc">${this.formatInlineMarkdown(lesson.description)}</span>
     </div>`);
     this.terminal.scrollToBottom();
 
@@ -392,6 +382,11 @@ class App {
     if (this.terminal && typeof this.terminal.resetInteractiveState === 'function') {
       this.terminal.resetInteractiveState(true);
     }
+    document.getElementById('guiFilePreview')?.classList.add('d-none');
+
+    if (this.commandEngine) {
+      this.commandEngine.resetEnvironment(false);
+    }
 
     if (this.currentLesson) {
       this.fs.setupForLesson(this.currentLesson.id, this.git, this.docker, this.sql, true);
@@ -402,10 +397,6 @@ class App {
       if (this.git) this.git.reset();
       if (this.docker) this.docker.reset();
       if (this.sql) this.sql.reset();
-      if (this.commandEngine) {
-        this.commandEngine.killedProcesses.clear();
-        this.commandEngine.backgroundJobs = [];
-      }
     }
 
     this.terminal.updatePrompt();
@@ -421,7 +412,29 @@ class App {
     const bar = document.getElementById('quickCmdBar');
     if (!bar) return;
     bar.innerHTML = '';
-    // Preserva o desafio: não expõe botões automáticos com o comando da solução na tela
+    if (!lesson || !Array.isArray(lesson.relatedCommands) || lesson.id === 'tool-man-page') return;
+
+    const registry = (this.commandEngine && typeof this.commandEngine.getManPagesRegistry === 'function')
+      ? this.commandEngine.getManPagesRegistry()
+      : (typeof MAN_PAGES !== 'undefined' ? MAN_PAGES : {});
+    const seen = new Set();
+
+    for (const rawRel of lesson.relatedCommands) {
+      const baseCmd = String(rawRel || '').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9._-]/g, '');
+      if (!baseCmd || seen.has(baseCmd) || !registry[baseCmd]) continue;
+      seen.add(baseCmd);
+
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'quick-cmd-chip';
+      chip.textContent = `📖 man ${baseCmd}`;
+      chip.title = `Consultar manual de "${baseCmd}" sem alterar o desafio`;
+      chip.addEventListener('click', () => {
+        this.terminal.runCommandProgrammatically(`man ${baseCmd}`);
+      });
+      bar.appendChild(chip);
+      if (seen.size >= 3) break;
+    }
   }
 
   selectFirstIncompleteLesson(catId) {
@@ -653,7 +666,7 @@ class App {
           </div>
           <div class="gui-badge-row">
             <span>Arquivos em Stage:</span>
-            <span>${staged.length > 0 ? staged.join(', ') : 'Nenhum'}</span>
+            <span>${staged.length > 0 ? staged.map(f => this.escapeHtml(f)).join(', ') : 'Nenhum'}</span>
           </div>
           <div class="gui-badge-row">
             <span>Total de Commits:</span>
@@ -738,7 +751,7 @@ class App {
           <div class="gui-table-title">📋 Tabela: enrollments (${this.sql.legacyEnrollments.length} registros)</div>
           <table class="gui-sql-table">
             <thead>
-              <tr><th>id</th><th>member_id</th><th>plan_id</th><th>ended_at</th></tr>
+              <tr><th>id</th><th>member_id</th><th>plan_id</th><th>started_at</th><th>ended_at</th></tr>
             </thead>
             <tbody>
               ${this.sql.legacyEnrollments.map(e => `
@@ -746,6 +759,7 @@ class App {
                   <td>${e.id}</td>
                   <td>${e.member_id}</td>
                   <td>${e.plan_id}</td>
+                  <td>${e.started_at ? this.escapeHtml(e.started_at) : '-'}</td>
                   <td>${e.ended_at ? this.escapeHtml(e.ended_at) : '<span class="ansi-green">NULL (Ativo)</span>'}</td>
                 </tr>
               `).join('')}
@@ -755,7 +769,9 @@ class App {
       `;
     }
 
-    const customEntries = Object.entries(this.sql.customTables || {});
+    const dbKey = isLegacy ? 'legacy' : 'gym';
+    const customMap = (this.sql.customTablesByDb && this.sql.customTablesByDb[dbKey]) || this.sql.customTables || {};
+    const customEntries = Object.entries(customMap);
     for (const [tName, tObj] of customEntries) {
       const cols = tObj.columns || [];
       const rows = tObj.rows || [];
@@ -852,10 +868,36 @@ class App {
   setupEventListeners() {
     // Atalhos Globais de Teclado (Navegação rápida sem mouse)
     document.addEventListener('keydown', (e) => {
-      // Ignora atalhos se modais ou editores estiverem abertos
+      // Ignora atalhos se editores estiverem abertos
       if (document.getElementById('nanoEditorOverlay') || document.getElementById('lessPagerOverlay')) return;
       const confirmModal = document.getElementById('confirmModal');
-      if (confirmModal && !confirmModal.classList.contains('d-none')) return;
+      if (confirmModal && !confirmModal.classList.contains('d-none')) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          confirmModal.classList.add('d-none');
+        }
+        return;
+      }
+
+      const activeEl = document.activeElement;
+      const isOtherEditable = activeEl && activeEl.id !== 'terminalInput' && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+
+      // Modal de conquista (Level Up)
+      const levelOverlay = document.getElementById('levelupOverlay');
+      if (levelOverlay && !levelOverlay.classList.contains('d-none')) {
+        if (e.key === 'Escape' || e.key === 'n' || e.key === 'N') {
+          e.preventDefault();
+          this.hideLevelupOverlay();
+        }
+        return;
+      }
+
+      if (isOtherEditable) return;
 
       const completionBar = document.getElementById('completionBar');
       const isCompletionVisible = completionBar && !completionBar.classList.contains('d-none');
@@ -881,15 +923,6 @@ class App {
         e.preventDefault();
         this.navigateRelativeLesson(-1);
         return;
-      }
-
-      // 3. Modal de conquista (Level Up)
-      const levelOverlay = document.getElementById('levelupOverlay');
-      if (levelOverlay && !levelOverlay.classList.contains('d-none')) {
-        if (e.key === 'Escape' || e.key === 'n' || e.key === 'N') {
-          e.preventDefault();
-          this.hideLevelupOverlay();
-        }
       }
     });
 
@@ -1005,14 +1038,12 @@ class App {
     if (listBtn) listBtn.addEventListener('click', () => this.terminal.runCommandProgrammatically('ls -la'));
     if (newFolderBtn) {
       newFolderBtn.addEventListener('click', () => {
-        const defaultName = this.currentLesson?.id === 'file-mkdir' ? 'myproject' : 'nova_pasta';
-        this.terminal.runCommandProgrammatically(`mkdir ${defaultName}`);
+        this.terminal.runCommandProgrammatically('mkdir nova_pasta');
       });
     }
     if (newFileBtn) {
       newFileBtn.addEventListener('click', () => {
-        const defaultName = this.currentLesson?.id === 'file-touch' ? 'test.txt' : 'arquivo.txt';
-        this.terminal.runCommandProgrammatically(`touch ${defaultName}`);
+        this.terminal.runCommandProgrammatically('touch arquivo.txt');
       });
     }
     if (closePreviewBtn) {
@@ -1074,9 +1105,14 @@ class App {
         this.completedLessons.clear();
         localStorage.removeItem(this.storageKey);
         confirmModal.classList.add('d-none');
+        this.terminal.clear();
+        if (this.commandEngine) this.commandEngine.resetEnvironment(true);
+        this.fs.reset();
+        if (this.git) this.git.reset();
+        if (this.docker) this.docker.reset();
+        if (this.sql) this.sql.reset();
         this.setActiveTab('beginner', true);
         this.updateStats();
-        this.terminal.clear();
         this.terminal.writeLine('<span class="ansi-green">✓ Progresso reiniciado com sucesso!</span>');
       });
     }
@@ -1085,6 +1121,12 @@ class App {
     if (levelupBtn) {
       levelupBtn.addEventListener('click', () => this.hideLevelupOverlay());
     }
+  }
+
+  formatInlineMarkdown(str) {
+    return this.escapeHtml(str)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>');
   }
 
   escapeHtml(str) {

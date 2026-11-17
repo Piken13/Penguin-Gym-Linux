@@ -858,10 +858,17 @@ body {
 
 .nano-status-bar {
   text-align: center;
-  padding: 0.2rem 0.5rem;
+  padding: 0.25rem 0.65rem;
   color: #e5e7eb;
   font-size: 0.8rem;
   background-color: #0b0d11;
+}
+
+.nano-status-bar.nano-prompt {
+  background-color: #e5e7eb;
+  color: #090a0d;
+  font-weight: 700;
+  text-align: left;
 }
 
 .nano-footer {
@@ -1024,6 +1031,7 @@ body {
 /* Completion Bar */
 .completion-bar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -1229,10 +1237,29 @@ body {
 }
 
 .gui-clean-toggle input[type="checkbox"] {
-  accent-color: var(--accent-green);
+  accent-color: var(--brand-green);
   cursor: pointer;
   width: 13px;
   height: 13px;
+}
+
+.challenge-description code,
+.hint-content code,
+.banner-desc code {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  color: #93c5fd;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.08rem 0.35rem;
+  border-radius: 4px;
+}
+
+.lesson-empty-state {
+  padding: 1.25rem 0.75rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .gui-file-list {
@@ -1487,8 +1514,9 @@ body {
 @media (max-width: 1024px) {
   body { height: auto; overflow: auto; }
   .app-main { flex-direction: column; height: auto; }
-  .app-sidebar { width: 100%; max-height: 360px; }
+  .app-sidebar { width: 100%; max-height: none; }
+  .lesson-list-scroll { max-height: 220px; }
   .workspace-split { flex-direction: column; }
-  .terminal-container { height: 460px; }
+  .terminal-container { height: 480px; }
   .gui-inspector { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); }
 }
