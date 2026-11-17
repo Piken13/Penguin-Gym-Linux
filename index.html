@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Penguin Gym Linux - Terminal Interativo & Interface Gráfica</title>
+  <meta name="description" content="Aprenda e pratique comandos Linux diretamente no navegador com terminal interativo, explorador gráfico de arquivos, visualizador SQL/Git/Docker e 251 exercícios práticos.">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>🐧</text></svg>">
+</head>
+<body>
+
+  <!-- Top Application Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <span class="brand-logo" aria-hidden="true">🐧</span>
+      <div>
+        <div class="brand-title-row">
+          <h1 class="brand-title">Penguin Gym Linux</h1>
+          <span class="brand-tag" id="brandLessonsCount">pt-BR • 251 Lições</span>
+        </div>
+        <p class="brand-subtitle">Simulador Interativo de Terminal Linux & Ambiente Gráfico</p>
+      </div>
+    </div>
+
+    <div class="progress-section">
+      <div class="level-badge" id="userLevelBadge">🌱 Iniciante</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-labels">
+          <span>Progresso Geral</span>
+          <span id="progressText">0 de 251 concluídos (0%)</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="overallProgressFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn-secondary active-toggle" id="btnToggleGuiPanel" title="Mostrar ou ocultar o Inspetor Gráfico (Arquivos, Git, Docker, SQL)">
+        🖥️ Painel Gráfico
+      </button>
+      <button type="button" class="btn-secondary" id="btnResetProgress" title="Apagar progresso e recomeçar do zero">
+        🔄 Reiniciar
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-main">
+
+    <!-- Left Sidebar: Categories, Search, and Lessons List -->
+    <aside class="app-sidebar" aria-label="Navegação de Lições">
+      <div class="sidebar-search">
+        <input type="search" id="lessonSearchInput" class="search-input" placeholder="🔍 Buscar lição ou comando (ex: grep, git)...">
+      </div>
+
+      <!-- Category Pills Grid -->
+      <div class="category-pills" id="categoryPills" role="tablist">
+        <!-- Gerado dinamicamente pelo JS -->
+      </div>
+
+      <!-- Current Category Header -->
+      <div class="category-list-header">
+        <span id="currentCategoryTitle">🌱 Iniciante</span>
+        <span id="currentCategoryCount" class="category-count-badge">0/18</span>
+      </div>
+
+      <!-- Scrollable Lesson List -->
+      <div class="lesson-list-scroll" id="lessonListContainer" role="region">
+        <!-- Gerado dinamicamente pelo JS -->
+      </div>
+    </aside>
+
+    <!-- Center Workspace: Challenge Panel & Terminal -->
+    <section class="app-workspace">
+      
+      <!-- Challenge / Exercise Box -->
+      <div class="challenge-panel" id="challengePanel">
+        <div class="challenge-header">
+          <div class="challenge-title-group">
+            <span class="lesson-Step-badge" id="lessonNumberBadge">Lição #1</span>
+            <h2 class="challenge-title" id="challengeTitle">Carregando lição...</h2>
+            <span class="lesson-difficulty" id="challengeDifficultyBadge">Iniciante</span>
+          </div>
+
+          <div class="challenge-nav-btns">
+            <button type="button" class="btn-nav" id="btnPrevLesson" title="Lição Anterior">⬅ Anterior</button>
+            <button type="button" class="btn-nav" id="btnNextLesson" title="Próxima Lição">Próxima ➡</button>
+          </div>
+        </div>
+
+        <div class="challenge-description" id="challengeDescription">
+          Selecione uma lição na barra lateral para começar a praticar.
+        </div>
+
+        <div class="challenge-actions-row">
+          <div class="challenge-actions">
+            <button type="button" class="hint-button" id="hintButton">
+              <span class="hint-icon">💡</span>
+              <span class="hint-text">Mostrar Dica</span>
+            </button>
+
+            <button type="button" class="answer-button" id="answerButton">
+              <span class="ans-icon">🔑</span>
+              <span class="ans-text">Ver Solução</span>
+            </button>
+
+            <button type="button" class="run-solution-button" id="btnRunSolution" title="Preenche e executa automaticamente a resposta correta no terminal">
+              <span>▶ Executar Solução</span>
+            </button>
+          </div>
+
+          <!-- Related Command Quick Buttons -->
+          <div class="quick-cmd-bar" id="quickCmdBar">
+            <!-- Botões rápidos da lição gerados via JS -->
+          </div>
+        </div>
+
+        <div class="hint-content d-none" id="hintContent"></div>
+        <div class="answer-content d-none" id="answerContent">
+          <div class="answer-code-row">
+            <code id="answerCodeText"></code>
+            <div class="answer-code-actions">
+              <button type="button" class="btn-mini" id="btnCopyAnswer" title="Copiar comando">📋 Copiar</button>
+              <button type="button" class="btn-mini btn-mini-primary" id="btnInsertAnswer" title="Executar comando agora">▶ Executar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Split Content: Terminal + Graphical Inspector -->
+      <div class="workspace-split" id="workspaceSplit">
+        
+        <!-- Linux Terminal Window -->
+        <div class="terminal-container">
+          <div class="terminal-area" id="terminalArea">
+            
+            <div class="terminal-header">
+              <div class="terminal-controls">
+                <div class="terminal-control-btn close" title="Fechar"></div>
+                <div class="terminal-control-btn minimize" title="Minimizar"></div>
+                <div class="terminal-control-btn maximize" title="Maximizar"></div>
+              </div>
+              <div class="terminal-title" id="terminalWindowTitle">user@gym:~</div>
+              <div class="terminal-tools">
+                <button type="button" class="terminal-tool-btn" id="btnTerminalHelp" title="Exibir comandos disponíveis">❓ Ajuda</button>
+                <button type="button" class="terminal-tool-btn" id="btnTerminalClear" title="Limpar terminal (clear)">🧹 Limpar</button>
+                <button type="button" class="terminal-tool-btn" id="btnResetFS" title="Limpar arquivos acumulados e restaurar o ponto inicial da lição">🧹 Restaurar Ponto Inicial</button>
+              </div>
+            </div>
+
+            <div class="terminal" id="terminal">
+              <div class="terminal-output" id="terminalOutput" role="log">
+                <span class="output-primary">🐧 Bem-vindo ao Penguin Gym Linux Terminal!</span><br>
+                <span class="output-muted">Digite os comandos abaixo ou use o <strong>Painel Gráfico</strong> ao lado para explorar pastas e arquivos visualmente.</span><br>
+                <span class="output-muted">Dica: pressione <strong>Tab</strong> para autocompletar, <strong>↑/↓</strong> para histórico, ou clique em <strong>▶ Executar Solução</strong>.</span><br>
+              </div>
+
+              <!-- Command Input Line -->
+              <div class="terminal-input-line">
+                <span class="terminal-prompt" id="terminalPrompt">user@gym:~$ </span>
+                <input type="text" class="terminal-input" id="terminalInput"
+                       placeholder="Digite um comando Linux aqui e pressione Enter..."
+                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                       aria-label="Entrada de comando Linux" autofocus>
+              </div>
+
+              <!-- Autocomplete Chips for mobile & quick select -->
+              <div class="terminal-mobile-assist" id="terminalMobileAssist">
+                <div class="terminal-completion-chips" id="terminalCompletionChips" hidden></div>
+                <button type="button" class="terminal-tab-key-btn" id="terminalTabBtn">Tab ⇥ Autocompletar</button>
+                <button type="button" class="terminal-tab-key-btn terminal-enter-btn" id="terminalEnterBtn">Enter ↵ Executar</button>
+              </div>
+
+              <!-- Success / Completion Notification Banner -->
+              <div class="completion-bar d-none" id="completionBar" role="status" aria-live="polite">
+                <span class="completion-bar__message" id="completionBarMessage"></span>
+                <button class="completion-bar__btn" id="completionBarNextBtn" type="button" title="Pressione 'n' para avançar para a próxima lição">Próxima Lição <span class="kbd-badge">n</span> ➔</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Graphical Inspector Panel (GUI File Explorer, Git/Docker, SQL Viewer) -->
+        <aside class="gui-inspector" id="guiInspector" aria-label="Inspetor Gráfico do Sistema">
+          <div class="gui-tabs">
+            <button type="button" class="gui-tab active" data-guitab="files" id="guiTabFiles">📂 Arquivos</button>
+            <button type="button" class="gui-tab" data-guitab="tools" id="guiTabTools">🐳 Git & Docker</button>
+            <button type="button" class="gui-tab" data-guitab="sql" id="guiTabSql">🗄️ Banco SQL</button>
+          </div>
+
+          <!-- Tab 1: Graphical File Explorer -->
+          <div class="gui-pane active" id="guiPane-files">
+            <div class="gui-toolbar">
+              <div class="gui-path-bar" id="guiCurrentPath" title="Diretório Atual">/home/user</div>
+              <div class="gui-toolbar-btns">
+                <button type="button" class="gui-icon-btn" id="btnGuiUpDir" title="Ir para diretório pai (cd ..)">⬆️ Pai</button>
+                <button type="button" class="gui-icon-btn" id="btnGuiHomeDir" title="Ir para pasta Home (cd ~)">🏠 Home</button>
+                <button type="button" class="gui-icon-btn" id="btnGuiListDir" title="Executar ls -la no terminal">📋 ls -la</button>
+                <button type="button" class="gui-icon-btn btn-gui-reset" id="btnGuiResetFiles" title="Restaurar ponto inicial limpo">🧹 Reset</button>
+              </div>
+            </div>
+
+            <div class="gui-quick-create">
+              <button type="button" class="gui-action-chip" id="btnGuiNewFolder">📁 + Pasta</button>
+              <button type="button" class="gui-action-chip" id="btnGuiNewFile">📄 + Arquivo</button>
+              <button type="button" class="gui-action-chip gui-action-reset" id="btnGuiResetEnv" title="Limpar todos os arquivos acumulados e restaurar o ponto inicial">🧹 Restaurar Ponto Inicial</button>
+            </div>
+            <div class="gui-options-bar">
+              <label class="gui-clean-toggle" title="Quando ativado, limpa automaticamente arquivos acumulados de missões anteriores ao mudar de lição">
+                <input type="checkbox" id="chkAutoCleanLessons" checked>
+                <span>Auto-limpar ao trocar de lição</span>
+              </label>
+            </div>
+
+            <div class="gui-file-list" id="guiFileList">
+              <!-- Lista gráfica de arquivos gerada via JS -->
+            </div>
+
+            <!-- File Content Preview Box -->
+            <div class="gui-file-preview d-none" id="guiFilePreview">
+              <div class="gui-preview-header">
+                <span id="guiPreviewTitle">📄 readme.txt</span>
+                <button type="button" class="gui-close-preview" id="btnClosePreview">✕</button>
+              </div>
+              <pre class="gui-preview-body" id="guiPreviewBody"></pre>
+            </div>
+          </div>
+
+          <!-- Tab 2: Git & Docker Visual State -->
+          <div class="gui-pane" id="guiPane-tools">
+            <div class="gui-section">
+              <h4 class="gui-section-title">🔀 Estado do Repositório Git</h4>
+              <div id="guiGitState" class="gui-state-card"></div>
+            </div>
+
+            <div class="gui-section">
+              <h4 class="gui-section-title">🐳 Estado do Docker</h4>
+              <div id="guiDockerState" class="gui-state-card"></div>
+            </div>
+          </div>
+
+          <!-- Tab 3: SQL Tables Visual Inspector -->
+          <div class="gui-pane" id="guiPane-sql">
+            <div class="gui-sql-selector">
+              <label for="guiDbSelect">Banco:</label>
+              <select id="guiDbSelect" class="gui-select">
+                <option value="gym">gym.db (Padrão)</option>
+                <option value="legacy">gym_legacy.db (Histórico/JOIN)</option>
+              </select>
+            </div>
+            <div id="guiSqlTables" class="gui-sql-tables"></div>
+          </div>
+        </aside>
+
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Level Up Celebration Modal -->
+  <div class="levelup-overlay d-none" id="levelupOverlay" role="dialog" aria-modal="true">
+    <div class="levelup-modal">
+      <div class="levelup-icon">🏆</div>
+      <h3 class="levelup-title" id="levelupTitle">Subiu de Nível!</h3>
+      <p class="levelup-message" id="levelupMessage">Parabéns pelo progresso!</p>
+      <div class="modal-actions">
+        <button type="button" class="levelup-btn" id="levelupContinueBtn">Continuar Aprendendo 🚀</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset Confirmation Modal -->
+  <div class="modal-overlay d-none" id="confirmModal" role="dialog" aria-modal="true">
+    <div class="confirm-modal">
+      <div class="levelup-icon">⚠️</div>
+      <h3 class="confirm-title">Reiniciar Todo o Progresso?</h3>
+      <p class="confirm-desc">
+        Tem certeza de que deseja apagar todo o progresso de lições e restaurar o sistema de arquivos para o estado padrão? Esta ação não pode ser desfeita.
+      </p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelReset">Cancelar</button>
+        <button type="button" class="btn-danger" id="confirmReset">Sim, Reiniciar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic Scripts -->
+  <script src="js/filesystem.js"></script>
+  <script src="js/git-engine.js"></script>
+  <script src="js/docker-engine.js"></script>
+  <script src="js/sql-engine.js"></script>
+  <script src="js/man-pages.js"></script>
+  <script src="js/commands.js"></script>
+  <script src="js/lessons-data.js"></script>
+  <script src="js/lesson-checker.js"></script>
+  <script src="js/terminal.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
