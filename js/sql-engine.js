@@ -685,10 +685,13 @@ class SQLEngine {
         const aliasMap = {};
         const vals = selectItems.map((item, i) => {
           const v = this.evalSelectExpr(item, gRows, allColNames, outerRow);
+          const exprNoAs = item.trim().replace(/\s+AS\s+\w+$/i, '').trim().toLowerCase();
+          const hdrKey = headerLabels[i].toLowerCase();
           outObj[item] = v;
           outObj[`_col${i}`] = v;
-          aliasMap[headerLabels[i].toLowerCase()] = v;
-          const exprNoAs = item.trim().replace(/\s+AS\s+\w+$/i, '').trim().toLowerCase();
+          outObj[hdrKey] = v;
+          outObj[exprNoAs] = v;
+          aliasMap[hdrKey] = v;
           aliasMap[exprNoAs] = v;
           return v;
         });
@@ -701,8 +704,11 @@ class SQLEngine {
       const outObj = {};
       const vals = selectItems.map((item, i) => {
         const v = this.evalSelectExpr(item, workingRows, allColNames, outerRow);
+        const exprNoAs = item.trim().replace(/\s+AS\s+\w+$/i, '').trim().toLowerCase();
         outObj[item] = v;
         outObj[`_col${i}`] = v;
+        outObj[headerLabels[i].toLowerCase()] = v;
+        outObj[exprNoAs] = v;
         return v;
       });
       projectedRows.push({ vals, raw: workingRows[0] || {}, outObj });
@@ -711,8 +717,11 @@ class SQLEngine {
         const outObj = {};
         const vals = selectItems.map((item, i) => {
           const v = this.evalSelectExpr(item, [r], allColNames, outerRow);
+          const exprNoAs = item.trim().replace(/\s+AS\s+\w+$/i, '').trim().toLowerCase();
           outObj[item] = v;
           outObj[`_col${i}`] = v;
+          outObj[headerLabels[i].toLowerCase()] = v;
+          outObj[exprNoAs] = v;
           return v;
         });
         projectedRows.push({ vals, raw: r, outObj });
@@ -726,16 +735,22 @@ class SQLEngine {
         return { col: m[1].trim(), desc: (m[2] || '').toUpperCase() === 'DESC' };
       });
       for (const spec of orderSpecs) {
-        if (!this.hasColumn(allColNames, spec.col) && !projectedRows.some(p => Object.prototype.hasOwnProperty.call(p.outObj, spec.col))) {
+        const specLower = spec.col.toLowerCase();
+        const inProjected = projectedRows.some(p =>
+          Object.prototype.hasOwnProperty.call(p.outObj, spec.col) ||
+          Object.prototype.hasOwnProperty.call(p.outObj, specLower)
+        );
+        if (!this.hasColumn(allColNames, spec.col) && !inProjected) {
           return { output: `Error: no such column: ${spec.col}`, type: 'error', code: 1 };
         }
       }
       projectedRows.sort((a, b) => {
         for (const spec of orderSpecs) {
+          const specLower = spec.col.toLowerCase();
           let va = this.resolveColVal(a.raw, spec.col);
-          if (va === undefined) va = a.outObj[spec.col];
+          if (va === undefined) va = Object.prototype.hasOwnProperty.call(a.outObj, spec.col) ? a.outObj[spec.col] : a.outObj[specLower];
           let vb = this.resolveColVal(b.raw, spec.col);
-          if (vb === undefined) vb = b.outObj[spec.col];
+          if (vb === undefined) vb = Object.prototype.hasOwnProperty.call(b.outObj, spec.col) ? b.outObj[spec.col] : b.outObj[specLower];
           if (va === vb) continue;
           if (va === null || va === undefined) return spec.desc ? 1 : -1;
           if (vb === null || vb === undefined) return spec.desc ? -1 : 1;

@@ -1099,7 +1099,7 @@ class LessonChecker {
         return effCmd === 'ufw' && effArgs.includes('disable') && output.includes('disabled on system startup');
 
       // ==========================================
-      // 10. DATABASE / SQL (17+ lições)
+      // 10. DATABASE / SQL (32 lições)
       // ==========================================
       case 'db-tables':
         return hasCall(allCalls, 'sqlite3') && raw.includes('.tables') && output.includes('members');
@@ -1107,15 +1107,80 @@ class LessonChecker {
       case 'db-schema':
         return hasCall(allCalls, 'sqlite3') && raw.includes('.schema') && output.includes('CREATE TABLE members');
 
+      case 'db-select-all':
+        return hasCall(allCalls, 'sqlite3') && /select\s+\*\s+from\s+members/i.test(raw) &&
+               /1[|,]Pip/.test(output) && /12[|,]Leo/.test(output);
+
+      case 'db-select-columns': {
+        const lines = output.trim().split('\n').filter(Boolean);
+        return hasCall(allCalls, 'sqlite3') &&
+               /select\s+(?:name\s*,\s*city|city\s*,\s*name)\s+from\s+members/i.test(raw) &&
+               !/select\s+\*/i.test(raw) &&
+               lines.length >= 12 &&
+               (/Pip[|,]Tokyo|Tokyo[|,]Pip/.test(output)) &&
+               (/Leo[|,]Sapporo|Sapporo[|,]Leo/.test(output)) &&
+               !output.includes('@example.com');
+      }
+
+      case 'db-select-distinct':
+        return hasCall(allCalls, 'sqlite3') &&
+               /select\s+distinct\s+city\s+from\s+members/i.test(raw) &&
+               output.includes('Tokyo') &&
+               output.includes('Sapporo') &&
+               output.split('Tokyo').length === 2;
+
       case 'db-count':
         return hasCall(allCalls, 'sqlite3') && /count\(\s*(\*|id|1)\s*\)/i.test(raw) && output.trim() === '12';
 
       case 'db-select-where':
         return hasCall(allCalls, 'sqlite3') && /where/i.test(raw) && /tokyo/i.test(raw) && output.includes('Pip');
 
+      case 'db-where-numeric':
+        return hasCall(allCalls, 'sqlite3') && /where/i.test(raw) && /age\s*(?:<|<=)\s*2[01]/i.test(raw) &&
+               output.includes('Momo') && output.includes('Luna') && output.includes('Yuki') &&
+               !output.includes('Pip') && !output.includes('Nico');
+
+      case 'db-where-and':
+        return hasCall(allCalls, 'sqlite3') && /where/i.test(raw) && /\band\b/i.test(raw) &&
+               output.includes('Kai') && !output.includes('Pip') && !output.includes('Nico');
+
+      case 'db-where-or':
+        return hasCall(allCalls, 'sqlite3') && /where/i.test(raw) && (/\bor\b/i.test(raw) || /\bin\s*\(/i.test(raw)) &&
+               output.includes('Tama') && output.includes('Ana') && output.includes('Ken') &&
+               !output.includes('Pip') && !output.includes('Nico');
+
+      case 'db-where-in':
+        return hasCall(allCalls, 'sqlite3') && /where/i.test(raw) && /\bin\s*\(/i.test(raw) &&
+               output.includes('Pip') && output.includes('Nico') && output.includes('Ken') &&
+               !output.includes('Tama') && !output.includes('Leo');
+
+      case 'db-is-not-null':
+        return hasCall(allCalls, 'sqlite3') && /is\s+not\s+null/i.test(raw) &&
+               output.includes('Pip') && output.includes('Leo') &&
+               !output.includes('Rio') && !output.includes('Ken');
+
+      case 'db-order-simple': {
+        const lines = output.trim().split('\n').filter(Boolean);
+        return hasCall(allCalls, 'sqlite3') && /order\s+by/i.test(raw) && !/\bdesc\b/i.test(raw) &&
+               lines.length >= 12 &&
+               /Yuki/.test(lines[0] + (lines[1] || '')) &&
+               /Nico/.test(lines[lines.length - 1]);
+      }
+
+      case 'db-limit-simple': {
+        const dataLines = output.trim().split('\n').filter(l => l && !/^id[|,]name$/i.test(l.trim()));
+        return hasCall(allCalls, 'sqlite3') && /limit\s+3\b/i.test(raw) &&
+               dataLines.length === 3 &&
+               output.includes('Pip') && output.includes('Kai') && !output.includes('Luna');
+      }
+
       case 'db-order-limit':
         return hasCall(allCalls, 'sqlite3') && /order\s+by\s+age\s+desc/i.test(raw) && /limit\s+3/i.test(raw) &&
                /Nico[|,]45/.test(output) && /Tama[|,]38/.test(output) && /Ken[|,]33/.test(output);
+
+      case 'db-min-max-as':
+        return hasCall(allCalls, 'sqlite3') && /min\s*\(\s*age\s*\)/i.test(raw) && /max\s*\(\s*age\s*\)/i.test(raw) &&
+               /(?:18[|,]45|45[|,]18)/.test(output);
 
       case 'db-group-count':
         return hasCall(allCalls, 'sqlite3') && /group\s+by/i.test(raw) && /count/i.test(raw) && output.includes('Tokyo|4');
@@ -1135,11 +1200,25 @@ class LessonChecker {
       case 'db-between':
         return hasCall(allCalls, 'sqlite3') && /between\s+20\s+and\s+30/i.test(raw) && output.includes('Pip') && !output.includes('Nico');
 
+      case 'db-join-simple': {
+        const lines = output.trim().split('\n').filter(Boolean);
+        return hasCall(allCalls, 'sqlite3') && /join/i.test(raw) && /enrollments/i.test(raw) && /plans/i.test(raw) &&
+               lines.length >= 10 && /1[|,]student/.test(output) && /5[|,]basic/.test(output);
+      }
+
       case 'db-join':
         return hasCall(allCalls, 'sqlite3') && /join/i.test(raw) && /ended_at\s+is\s+null/i.test(raw) && output.includes('Momo|pro');
 
       case 'db-left-join':
         return hasCall(allCalls, 'sqlite3') && (/left\s+join/i.test(raw) || /not\s+in/i.test(raw) || /not\s+exists/i.test(raw)) && output.includes('Kai');
+
+      case 'db-boss-report': {
+        const lines = output.trim().split('\n').filter(Boolean);
+        return hasCall(allCalls, 'sqlite3') && /join/i.test(raw) && /ended_at\s+is\s+null/i.test(raw) &&
+               /group\s+by/i.test(raw) && /order\s+by/i.test(raw) && /\bdesc\b/i.test(raw) &&
+               /pro[|,]2[|,]10000/.test(output) && /basic[|,]1[|,]3000/.test(output) && /student[|,]1[|,]2000/.test(output) &&
+               /pro/.test(lines[0] + (lines[1] || '')) && /student/.test(lines[lines.length - 1]);
+      }
 
       case 'db-update-where':
         return hasCall(allCalls, 'sqlite3') && /update\s+members/i.test(raw) && /osaka/i.test(raw) &&

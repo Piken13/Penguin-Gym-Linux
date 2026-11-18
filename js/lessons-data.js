@@ -4328,8 +4328,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Descobrir tabelas de um banco de dados",
-    "description": "Conecte-se ao banco gym.db e descubra quais tabelas existem nele, de forma equivalente a listar arquivos no shell.",
-    "hint": "Execute `sqlite3 gym.db .tables`. O .tables é um comando de ponto do sqlite3",
+    "description": "Um arquivo `.db` guarda várias **tabelas** (como abas de uma planilha). No SQLite, comandos que começam com ponto (`.`) inspecionam a estrutura do banco e não precisam de `;` no final.\nConsulte quais tabelas existem dentro de `gym.db` usando `.tables`.",
+    "hint": "**Como rodar comandos no SQLite pelo terminal:**\n• Formato: `sqlite3 <arquivo_do_banco> <comando>`.\n• `.tables` equivale ao `ls` das pastas — ele apenas lista o nome das tabelas do banco.\n• Você também pode digitar `sqlite3 gym.db` para abrir o prompt interativo `sqlite>` e depois digitar `.tables`!\nExecute `sqlite3 gym.db .tables`",
     "answer": "sqlite3 gym.db .tables",
     "answerSteps": [
       "sqlite3 gym.db .tables"
@@ -4345,9 +4345,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Iniciante",
     "lpicObjective": null,
-    "title": "Inspecionar estrutura de colunas de uma tabela",
-    "description": "Exiba a definição do esquema de colunas e tipos de dados da tabela 'members' do banco gym.db.",
-    "hint": "Execute `sqlite3 gym.db \".schema members\"`. Sem o nome da tabela, aparecem as definições de todas as tabelas",
+    "title": "Inspecionar colunas e tipos de uma tabela (.schema)",
+    "description": "Antes de consultar ou filtrar dados, você precisa saber o **nome exato das colunas** e o tipo de dado (`INTEGER` = número inteiro, `TEXT` = texto).\nVeja a estrutura da tabela `members` no banco `gym.db` usando `.schema`.",
+    "hint": "**Por que colocar aspas ao redor de `\".schema members\"`?**\nPorque há um espaço no meio! Sem aspas, o terminal tentaria passar `members` separado do `.schema`.\n• Dica extra: o Painel **🗄️ Banco SQL** à direita também mostra todas as tabelas visualmente.\nExecute `sqlite3 gym.db \".schema members\"`",
     "answer": "sqlite3 gym.db \".schema members\"",
     "answerSteps": [
       "sqlite3 gym.db \".schema members\""
@@ -4358,21 +4358,58 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "db-count",
+    "id": "db-select-all",
     "category": "database",
     "categoryLabel": "SQL",
     "difficulty": "Iniciante",
     "lpicObjective": null,
-    "title": "Totalizar registros cadastrados na tabela",
-    "description": "Calcule a quantidade total de registros armazenados na tabela 'members' do banco gym.db.",
-    "hint": "Execute `sqlite3 gym.db \"SELECT COUNT(*) FROM members;\"`. Também dá para entrar no modo interativo com `sqlite3 gym.db` e digitar `SELECT COUNT(*) FROM members;` no prompt `sqlite>`. O wc -l members.csv mostra um a mais porque o CSV começa com uma linha de cabeçalho que tem só os nomes das colunas",
-    "answer": "sqlite3 gym.db \"SELECT COUNT(*) FROM members;\"",
+    "title": "Primeira consulta SQL: ver todos os registros (SELECT *)",
+    "description": "Toda consulta de leitura em SQL segue a base **`SELECT <colunas> FROM <tabela>;`**. O asterisco `*` significa *\"todas as colunas\"* e comandos SQL terminam com ponto e vírgula (`;`).\nExiba todas as colunas e linhas da tabela `members` em `gym.db`.",
+    "hint": "**Anatomia da sua 1ª query SQL:**\n• `SELECT *`: traga todas as colunas (`id`, `name`, `email`, `city`, `age`).\n• `FROM members`: da tabela `members`.\n• **No terminal:** envolva o SQL inteiro em aspas duplas `\"...\"` para o Bash entregar tudo junto ao `sqlite3`.\nExecute `sqlite3 gym.db \"SELECT * FROM members;\"`",
+    "answer": "sqlite3 gym.db \"SELECT * FROM members;\"",
     "answerSteps": [
-      "sqlite3 gym.db \"SELECT COUNT(*) FROM members;\""
+      "sqlite3 gym.db \"SELECT * FROM members;\""
     ],
     "relatedCommands": [
       "sqlite3",
-      "wc"
+      "cat"
+    ]
+  },
+  {
+    "id": "db-select-columns",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Escolher apenas colunas específicas no SELECT",
+    "description": "Em bancos reais com dezenas de colunas, `SELECT *` traz dados demais. Para buscar só o que interessa, trocamos o `*` pelos nomes das colunas separados por vírgula.\nConsulte apenas `name` e `city` de todos os alunos da tabela `members` em `gym.db`.",
+    "hint": "**Regra da vírgula:**\nListe exatamente as colunas desejadas após `SELECT`, separadas por vírgula (sem vírgula antes do `FROM`!).\nExecute `sqlite3 gym.db \"SELECT name, city FROM members;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name, city FROM members;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name, city FROM members;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "cut"
+    ]
+  },
+  {
+    "id": "db-select-distinct",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Remover resultados repetidos com DISTINCT",
+    "description": "Se você rodar `SELECT city FROM members;`, a cidade `Tokyo` aparece 4 vezes e `Osaka` 3 vezes. Para ver apenas **valores únicos** (equivalente ao `sort -u`), colocamos `DISTINCT` logo após `SELECT`.\nListe todas as cidades distintas da tabela `members` em `gym.db`.",
+    "hint": "**Onde vai o `DISTINCT`?**\nEle vem sempre **entre `SELECT` e o nome da coluna**: `SELECT DISTINCT coluna FROM tabela;`.\nExecute `sqlite3 gym.db \"SELECT DISTINCT city FROM members;\"`",
+    "answer": "sqlite3 gym.db \"SELECT DISTINCT city FROM members;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT DISTINCT city FROM members;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "uniq",
+      "sort"
     ]
   },
   {
@@ -4381,9 +4418,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Iniciante",
     "lpicObjective": null,
-    "title": "Filtrar registros por critério específico",
-    "description": "Consulte na tabela 'members' apenas o nome dos alunos que residem na cidade de \"Tokyo\".",
-    "hint": "Execute `sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\"`. Textos ficam entre aspas simples",
+    "title": "Filtrar linhas de texto com WHERE",
+    "description": "A cláusula **`WHERE`** funciona como um filtro (`grep`): ela escolhe apenas as linhas que satisfazem uma condição. Em SQL, valores de texto ficam sempre entre **aspas simples `'...'`**.\nConsulte em `gym.db` apenas o `name` dos membros que moram em `'Tokyo'`.",
+    "hint": "**Atenção às aspas dentro de aspas:**\n• Por fora: aspas **duplas** `\"...\"` para o terminal Bash.\n• Por dentro: aspas **simples** `'Tokyo'` para dizer ao SQL que é um texto (diferenciando maiúsculas de minúsculas!).\nExecute `sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\"`",
     "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\"",
     "answerSteps": [
       "sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\""
@@ -4394,71 +4431,85 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "db-order-limit",
+    "id": "db-where-numeric",
     "category": "database",
     "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
+    "difficulty": "Iniciante",
     "lpicObjective": null,
-    "title": "Ordenar e mostrar só as primeiras linhas",
-    "description": "Mostre o `name` e a `age` dos 3 membros mais velhos, da maior `age` para a menor (empates em ordem de `name`), com ORDER BY e LIMIT. No Linux (usando members.csv): sort -t, -k5 -rn | head -3.",
-    "hint": "Execute `sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\"`. DESC significa do maior para o menor",
-    "answer": "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\"",
+    "title": "Filtrar números com operadores (<, >, !=)",
+    "description": "Ao contrário de textos (`'Tokyo'`), **números NÃO usam aspas** no SQL e aceitam comparações matemáticas como `=`, `!=`, `<`, `>`, `<=` e `>=`.\nMostre `name` e `age` dos membros de `gym.db` que têm **menos de 21 anos** (`age < 21`).",
+    "hint": "**Comparando números no `WHERE`:**\n• Como `age` é `INTEGER` (número), escrevemos direto `age < 21` (sem aspas!).\n• Para trazer mais de uma coluna, separe com vírgula no `SELECT`: `SELECT name, age`.\nExecute `sqlite3 gym.db \"SELECT name, age FROM members WHERE age < 21;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name, age FROM members WHERE age < 21;\"",
     "answerSteps": [
-      "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\""
-    ],
-    "relatedCommands": [
-      "sqlite3",
-      "sort",
-      "head"
-    ]
-  },
-  {
-    "id": "db-like-search",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Filtrar por padrão de texto com LIKE",
-    "description": "Consulte em gym.db o nome dos membros cujo email termina com '@example.com' usando o operador LIKE.",
-    "hint": "Execute sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
-    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
-    "answerSteps": [
-      "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\""
+      "sqlite3 gym.db \"SELECT name, age FROM members WHERE age < 21;\""
     ],
     "relatedCommands": [
       "sqlite3"
     ]
   },
   {
-    "id": "db-null",
-    "category": "database",
-    "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
-    "lpicObjective": null,
-    "title": "Encontrar membros sem e-mail",
-    "description": "Mostre o `name` dos membros sem e-mail. `SELECT name FROM members WHERE email = NULL;` retorna 0 linhas, porque NULL não se compara com =. Corrija. No Linux, equivale a `grep -v @ members.csv`.",
-    "hint": "Execute `sqlite3 gym.db \"SELECT name FROM members WHERE email IS NULL;\"`. Para saber se falta um valor (NULL), use IS NULL. = NULL não coincide com nenhuma linha",
-    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email IS NULL;\"",
-    "answerSteps": [
-      "sqlite3 gym.db \"SELECT name FROM members WHERE email IS NULL;\""
-    ],
-    "relatedCommands": [
-      "sqlite3",
-      "grep"
-    ]
-  },
-  {
     "id": "db-boundary",
     "category": "database",
     "categoryLabel": "SQL",
-    "difficulty": "Intermediário",
+    "difficulty": "Iniciante",
     "lpicObjective": null,
-    "title": "Conferir o limite de \"ou mais\"",
-    "description": "Conte os membros com 20 anos ou mais. `SELECT COUNT(*) FROM members WHERE age > 20;` deixa de fora quem tem exatamente 20. \"20 ou mais\" inclui o limite 20. Corrija para responder à pergunta.",
-    "hint": "Execute `sqlite3 gym.db \"SELECT COUNT(*) FROM members WHERE age >= 20;\"`. >= significa \"ou mais\" (inclui 20); > significa \"maior que\" (não inclui 20)",
+    "title": "Cuidado com o limite: >= vs >",
+    "description": "Um bug super comum é errar o limite de corte: `WHERE age > 20` deixa de fora quem tem exatamente `20` anos (como Momo e Sora!). Quando queremos **\"20 ou mais\"**, usamos **`>=`**.\nConte quantos membros têm **20 anos ou mais** em `gym.db` usando `COUNT(*)`.",
+    "hint": "**Diferença entre `>` e `>=`:**\n• `age > 20` → começa no `21` (`20` fica de fora).\n• `age >= 20` → **inclui** quem tem `20`!\n• Use `SELECT COUNT(*) FROM members WHERE ...;` para contar em vez de listar nomes.\nExecute `sqlite3 gym.db \"SELECT COUNT(*) FROM members WHERE age >= 20;\"`",
     "answer": "sqlite3 gym.db \"SELECT COUNT(*) FROM members WHERE age >= 20;\"",
     "answerSteps": [
       "sqlite3 gym.db \"SELECT COUNT(*) FROM members WHERE age >= 20;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-where-and",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Combinar duas condições obrigatórias com AND",
+    "description": "Quando um filtro exige que **dois critérios sejam verdadeiros ao mesmo tempo**, ligamos os dois testes no `WHERE` com **`AND`** (*E*).\nMostre o `name` dos membros de `gym.db` que moram em `'Tokyo'` **E** têm `age >= 25`.",
+    "hint": "**Como ler o `AND`:**\nA linha só aparece no resultado se a 1ª condição (`city = 'Tokyo'`) **E** a 2ª (`age >= 25`) forem verdadeiras.\n• Não precisa repetir `WHERE`: escreva `WHERE cond1 AND cond2;`.\nExecute `sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo' AND age >= 25;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo' AND age >= 25;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name FROM members WHERE city = 'Tokyo' AND age >= 25;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-where-or",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Iniciante",
+    "lpicObjective": null,
+    "title": "Aceitar uma condição ou outra com OR",
+    "description": "**Pegadinha clássica:** se você escrever `city = 'Lisboa' AND city = 'Porto'`, vai dar **0 resultados** porque ninguém mora nas duas cidades na mesma linha! Para aceitar *uma opção OU outra*, usamos **`OR`**.\nMostre `name` e `city` dos membros de `'Lisboa'` ou `'Porto'` em `gym.db`.",
+    "hint": "**Pegadinha importante do `OR`:**\nSempre repita o nome da coluna depois do `OR`! Escrever `city = 'Lisboa' OR 'Porto'` **não** funciona — precisa ser `city = 'Lisboa' OR city = 'Porto'`.\nExecute `sqlite3 gym.db \"SELECT name, city FROM members WHERE city = 'Lisboa' OR city = 'Porto';\"`",
+    "answer": "sqlite3 gym.db \"SELECT name, city FROM members WHERE city = 'Lisboa' OR city = 'Porto';\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name, city FROM members WHERE city = 'Lisboa' OR city = 'Porto';\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-where-in",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Substituir vários OR por uma lista limpa com IN (...)",
+    "description": "Escrever `city = 'A' OR city = 'B' OR city = 'C'` cansa rápido! O operador **`IN ('A', 'B', 'C')`** deixa a consulta muito mais curta e fácil de ler.\nMostre o `name` dos membros de `gym.db` cuja cidade está na lista `'Tokyo'`, `'Osaka'` ou `'Porto'` usando `IN`.",
+    "hint": "**Sintaxe limpa do `IN`:**\n`WHERE coluna IN ('valor1', 'valor2', 'valor3')` — funciona exatamente como vários `OR`, mas sem repetir `city =`!\nExecute `sqlite3 gym.db \"SELECT name FROM members WHERE city IN ('Tokyo', 'Osaka', 'Porto');\"`",
+    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE city IN ('Tokyo', 'Osaka', 'Porto');\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name FROM members WHERE city IN ('Tokyo', 'Osaka', 'Porto');\""
     ],
     "relatedCommands": [
       "sqlite3"
@@ -4471,11 +4522,171 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Filtrar faixa numérica com BETWEEN",
-    "description": "No banco gym.db, selecione `name` e `age` dos membros cuja idade esteja entre 20 e 30 anos (inclusive) utilizando o operador BETWEEN.",
-    "hint": "Execute sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\"",
+    "description": "Em vez de escrever `age >= 20 AND age <= 30`, o SQL tem um atalho muito mais legível: **`BETWEEN 20 AND 30`** (que **inclui** os valores `20` e `30` das pontas).\nEm `gym.db`, selecione `name` e `age` dos membros entre `20` e `30` anos usando `BETWEEN`.",
+    "hint": "**Atenção:** `BETWEEN A AND B` sempre inclui `A` e `B` (ou seja, `20` e `30` entram na conta!).\nExecute `sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\"`",
     "answer": "sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\"",
     "answerSteps": [
       "sqlite3 gym.db \"SELECT name, age FROM members WHERE age BETWEEN 20 AND 30;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-like-search",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Buscar por trecho de texto com LIKE e %",
+    "description": "Enquanto `=` exige o texto exato inteiro, o **`LIKE`** permite buscar por parte do texto! Em SQL, o símbolo curinga para *\"qualquer sequência de caracteres\"* é **`%`** (diferente do `*` do terminal Linux).\nConsulte em `gym.db` o `name` dos membros cujo `email` termina com `'@example.com'`.",
+    "hint": "**Como usar `%` no `LIKE`:**\n• `'%@example.com'` → qualquer coisa no começo, **terminando** em `@example.com`.\n• `'A%'` → **começa** com `A`.\n• `'%ana%'` → **contém** `ana` em qualquer lugar.\nExecute `sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"`",
+    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name FROM members WHERE email LIKE '%@example.com';\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "grep"
+    ]
+  },
+  {
+    "id": "db-null",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Encontrar valores ausentes com IS NULL",
+    "description": "Em bancos de dados, campo vazio desconhecido se chama **`NULL`**. Se você testar `WHERE email = NULL;`, vai dar **0 linhas** porque `NULL` significa *\"desconhecido\"* — e não se compara com `=`!\nMostre o `name` dos membros de `gym.db` sem e-mail usando **`IS NULL`**.",
+    "hint": "**Regra de ouro do `NULL`:**\nNunca use `= NULL` nem `!= NULL`. Para checar ausência de valor usamos sempre **`IS NULL`** (equivalente a `grep -v @ members.csv` no Linux).\nExecute `sqlite3 gym.db \"SELECT name FROM members WHERE email IS NULL;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email IS NULL;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name FROM members WHERE email IS NULL;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "grep"
+    ]
+  },
+  {
+    "id": "db-is-not-null",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Filtrar apenas campos preenchidos com IS NOT NULL",
+    "description": "E quando queremos o oposto — excluir registros sem e-mail e pegar **somente quem tem e-mail preenchido**? Basta negar com **`IS NOT NULL`** (nunca `!= NULL`)!\nMostre o `name` dos membros de `gym.db` que possuem `email` cadastrado.",
+    "hint": "Troque `IS NULL` por **`IS NOT NULL`** para manter apenas linhas em que a coluna `email` não está vazia.\nExecute `sqlite3 gym.db \"SELECT name FROM members WHERE email IS NOT NULL;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name FROM members WHERE email IS NOT NULL;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name FROM members WHERE email IS NOT NULL;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-order-simple",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Ordenar resultados com ORDER BY",
+    "description": "Sem ordenação explícita, linhas saem na ordem em que foram gravadas. A cláusula **`ORDER BY`** ordena o resultado: por padrão do **menor para o maior (`ASC`)**, ou do maior para o menor (`DESC`).\nEm `gym.db`, liste `name` e `age` de todos os membros ordenados do **mais jovem para o mais velho**.",
+    "hint": "**Como funciona o `ORDER BY`:**\n• Vai **depois** do `FROM` (e depois do `WHERE`, se houver filtro).\n• `ORDER BY age ASC` (ou apenas `ORDER BY age`) ordena em ordem crescente (`18` até `45`).\nExecute `sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age ASC;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age ASC;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age ASC;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "sort"
+    ]
+  },
+  {
+    "id": "db-limit-simple",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Limitar quantidade de linhas com LIMIT",
+    "description": "Em tabelas grandes, pedir todas as linhas pode travar a tela — o **`LIMIT`** corta o resultado após *N* linhas (igual ao `head -n` no Linux!).\nExiba `id` e `name` apenas dos **3 primeiros** registros de `members` em `gym.db`.",
+    "hint": "**Posição do `LIMIT`:** ele fica sempre bem no **final** da consulta (`SELECT ... FROM ... LIMIT 3;`).\nExecute `sqlite3 gym.db \"SELECT id, name FROM members LIMIT 3;\"`",
+    "answer": "sqlite3 gym.db \"SELECT id, name FROM members LIMIT 3;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT id, name FROM members LIMIT 3;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "head"
+    ]
+  },
+  {
+    "id": "db-order-limit",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Ranking Top 3 combinando ORDER BY DESC e LIMIT",
+    "description": "Agora juntamos os dois! Para montar um ranking (*Top 3*), primeiro ordenamos do maior para o menor com **`ORDER BY coluna DESC`** e só depois cortamos com **`LIMIT 3`**.\nMostre `name` e `age` dos **3 membros mais velhos** de `gym.db` (em caso de empate na idade, ordene por `name`).",
+    "hint": "**Múltiplas colunas no `ORDER BY`:**\nSepare os critérios por vírgula: primeiro `age DESC` (maior primeiro), depois `name` (empates em ordem alfabética), e `LIMIT 3` no fim.\n*(Equivalente no Linux: `sort -t, -k5 -rn | head -3`.)*\nExecute `sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\"`",
+    "answer": "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT name, age FROM members ORDER BY age DESC, name LIMIT 3;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "sort",
+      "head"
+    ]
+  },
+  {
+    "id": "db-count",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Contar registros com a função COUNT(*)",
+    "description": "As **funções de agregação** resumem várias linhas em um único número! A mais famosa é `COUNT(*)`, que conta quantas linhas existem na consulta (como `wc -l`, mas sem contar linha de cabeçalho).\nConte o total de registros da tabela `members` em `gym.db`.",
+    "hint": "• `COUNT(*)` vai no lugar das colunas após `SELECT`: `SELECT COUNT(*) FROM members;`.\n• Dica extra: no CSV (`wc -l members.csv`), vem `13` porque a 1ª linha é o cabeçalho; no SQL retorna exatamente `12` alunos!\nExecute `sqlite3 gym.db \"SELECT COUNT(*) FROM members;\"`",
+    "answer": "sqlite3 gym.db \"SELECT COUNT(*) FROM members;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT COUNT(*) FROM members;\""
+    ],
+    "relatedCommands": [
+      "sqlite3",
+      "wc"
+    ]
+  },
+  {
+    "id": "db-min-max-as",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Calcular mínimo, máximo e dar apelidos (MIN, MAX, AS)",
+    "description": "Além de `COUNT`, podemos achar o menor valor com **`MIN(col)`** e o maior com **`MAX(col)`**, e renomear o resultado usando **`AS apelido`** (*alias*) para deixar relatórios legíveis.\nEm `gym.db`, consulte na mesma query `MIN(age) AS menor_idade` e `MAX(age) AS maior_idade` de `members`.",
+    "hint": "**Como dar apelido a uma coluna/função:**\nEscreva `expressao AS nome_bonito` no `SELECT` (ex.: `MIN(age) AS menor_idade, MAX(age) AS maior_idade`).\nExecute `sqlite3 gym.db \"SELECT MIN(age) AS menor_idade, MAX(age) AS maior_idade FROM members;\"`",
+    "answer": "sqlite3 gym.db \"SELECT MIN(age) AS menor_idade, MAX(age) AS maior_idade FROM members;\"",
+    "answerSteps": [
+      "sqlite3 gym.db \"SELECT MIN(age) AS menor_idade, MAX(age) AS maior_idade FROM members;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-sum-avg",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Intermediário",
+    "lpicObjective": null,
+    "title": "Calcular média numérica com AVG()",
+    "description": "Assim como `SUM(col)` soma uma coluna, **`AVG(col)`** (*average*) calcula a média aritmética ignorando valores `NULL`.\nA partir desta trilha temos também o banco **`gym_legacy.db`** (com tabelas `members`, `plans` e `enrollments`). Nele, calcule a média do preço mensal (`monthly_fee`) da tabela `plans`.",
+    "hint": "**Atenção ao arquivo do banco!** Aqui o banco é **`gym_legacy.db`** (não `gym.db`), e a tabela é `plans`.\n• Para arredondar casas decimais também é possível envolver com `ROUND(AVG(monthly_fee), 2)`.\nExecute `sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"`",
+    "answer": "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
+    "answerSteps": [
+      "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\""
     ],
     "relatedCommands": [
       "sqlite3"
@@ -4487,9 +4698,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Contar por grupo",
-    "description": "Conte os membros de cada `city` com GROUP BY. No Linux, isso equivale a `cut -d , -f 4 members.csv | sort | uniq -c`. Execute também: as contagens batem, mas sobra uma linha.",
-    "hint": "Execute `sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"`. A linha extra `1 city` na saída do uniq -c vem da linha de cabeçalho do CSV",
+    "title": "Agrupar e contar por categoria com GROUP BY",
+    "description": "`COUNT(*)` sozinho conta a tabela inteira; mas se quisermos **um total separado para cada cidade**, usamos **`GROUP BY city`** (que cria uma \"caixinha\" por cidade e aplica `COUNT(*)` dentro de cada uma!).\nEm `gym.db`, conte quantos membros existem em cada `city` usando `GROUP BY`.",
+    "hint": "**Regra de ouro do `GROUP BY`:**\nToda coluna solta no `SELECT` que **não** está dentro de `COUNT/SUM/AVG` precisa aparecer no `GROUP BY`!\n*(No Linux, equivale a `cut -d , -f 4 members.csv | sort | uniq -c` — só que sem contar o cabeçalho!)*\nExecute `sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"`",
     "answer": "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\"",
     "answerSteps": [
       "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city;\""
@@ -4502,17 +4713,17 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "db-sum-avg",
+    "id": "db-having",
     "category": "database",
     "categoryLabel": "SQL",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Calcular média numérica com AVG",
-    "description": "No banco gym_legacy.db, calcule a média de valor (monthly_fee) da tabela plans usando AVG().",
-    "hint": "Execute sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
-    "answer": "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\"",
+    "title": "Filtrar grupos já contados com HAVING",
+    "description": "**Dúvida clássica de SQL:** por que `WHERE COUNT(*) > 2` dá erro? Porque `WHERE` filtra **linhas antes** de agrupar; para filtrar **grupos depois** do `GROUP BY` (ex.: cidades com mais de 2 alunos), usamos **`HAVING`**!\nEm `gym.db`, agrupe por `city` e exiba somente as cidades com `COUNT(*) > 2`.",
+    "hint": "**Ordem mental fixa do SQL:**\n`WHERE` (filtra linhas) → `GROUP BY` (agrupa) → **`HAVING`** (filtra os grupos já agregados!).\nExecute `sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\"`",
+    "answer": "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\"",
     "answerSteps": [
-      "sqlite3 gym_legacy.db \"SELECT AVG(monthly_fee) FROM plans;\""
+      "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\""
     ],
     "relatedCommands": [
       "sqlite3"
@@ -4524,9 +4735,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Processar saída de consulta SQL através de filtros shell",
-    "description": "Exporte a lista de cidades dos membros em formato CSV e ordene/totalize as ocorrências utilizando pipes do Linux.",
-    "hint": "Execute `sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c`. Sem o sort, o uniq só junta linhas iguais que estão uma ao lado da outra. As contagens batem com o resultado do GROUP BY do desafio anterior",
+    "title": "Integrar SQLite com pipes do Linux (-csv | sort | uniq -c)",
+    "description": "Na prática de automação, o `sqlite3` conversa direto com comandos do terminal via `|` (*pipe*)! A flag **`-csv`** faz o banco imprimir valores limpos fáceis de processar no shell.\nExporte `city` de `members` (`gym.db`) com `sqlite3 -csv` e conte ocorrências usando `| sort | uniq -c`.",
+    "hint": "• Lembre que `uniq -c` só agrupa linhas iguais quando elas estão **vizinhas** — por isso `sort` vem antes de `uniq -c`!\n• Compare o resultado com o `GROUP BY city` anterior: as contagens batem!\nExecute `sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c`",
     "answer": "sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c",
     "answerSteps": [
       "sqlite3 -csv gym.db \"SELECT city FROM members\" | sort | uniq -c"
@@ -4543,9 +4754,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Criar uma nova tabela no SQLite",
-    "description": "No banco gym.db, crie uma nova tabela chamada \"workouts\" com as colunas \"id INTEGER PRIMARY KEY\" e \"title TEXT\" e observe-a aparecer no Painel SQL.",
-    "hint": "Execute sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"",
+    "title": "Criar uma nova tabela no SQLite (CREATE TABLE)",
+    "description": "Até aqui só **lemos** dados (`SELECT`). Agora vamos construir estrutura! **`CREATE TABLE nome (col1 TIPO, col2 TIPO);`** cria uma nova tabela vazia no banco.\nEm `gym.db`, crie a tabela `workouts` com as colunas `id INTEGER PRIMARY KEY` e `title TEXT` (veja aparecer no **Painel SQL** à direita!).",
+    "hint": "**Tipos básicos no SQLite:** `INTEGER` (números inteiros), `TEXT` (textos), `PRIMARY KEY` (identificador único automático da linha).\nExecute `sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"`",
     "answer": "sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\"",
     "answerSteps": [
       "sqlite3 gym.db \"CREATE TABLE workouts (id INTEGER PRIMARY KEY, title TEXT);\""
@@ -4560,9 +4771,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Intermediário",
     "lpicObjective": null,
-    "title": "Inserir novo membro na tabela (INSERT INTO)",
-    "description": "Matricule o novo aluno 'Tux' (id 13, email 'tux@example.com', cidade 'Tokyo', idade 25) na tabela members de gym.db.",
-    "hint": "Execute sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"",
+    "title": "Inserir novo registro na tabela (INSERT INTO)",
+    "description": "Para gravar uma nova linha usamos **`INSERT INTO tabela (colunas) VALUES (valores);`**, mantendo exatamente a mesma ordem entre colunas e valores (textos entre `'...'`, números sem aspas).\nMatricule `'Tux'` (`id` `13`, `email` `'tux@example.com'`, `city` `'Tokyo'`, `age` `25`) em `members` de `gym.db`.",
+    "hint": "**Cuidado na correspondência 1-para-1:** cada coluna listada em `(id, name, email, city, age)` deve bater em posição e tipo com `(13, 'Tux', 'tux@example.com', 'Tokyo', 25)`.\nExecute `sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"`",
     "answer": "sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\"",
     "answerSteps": [
       "sqlite3 gym.db \"INSERT INTO members (id, name, email, city, age) VALUES (13, 'Tux', 'tux@example.com', 'Tokyo', 25);\""
@@ -4577,11 +4788,12 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Avançado",
     "lpicObjective": null,
-    "title": "Atualizar registro específico no banco",
-    "description": "No banco gym_legacy.db, atualize a cidade do aluno de código (id) 3 para \"Osaka\", modificando estritamente essa linha.",
-    "hint": "Primeiro execute `sqlite3 gym_legacy.db \"SELECT COUNT(*) FROM members WHERE id = 3;\"` para confirmar 1 linha e depois `sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"`. Sem WHERE, a city de todos os membros muda",
+    "title": "Atualizar registro específico com UPDATE ... WHERE",
+    "description": "Um dos erros mais temidos em produção é rodar `UPDATE tabela SET ...` **sem `WHERE`** — isso altera **todas as linhas** da tabela inteira! Sempre filtre pela chave única (`WHERE id = 3`).\nNo banco **`gym_legacy.db`**, altere apenas a `city` do aluno de `id = 3` para `'Osaka'`.",
+    "hint": "**Hábito de ouro antes de alterar dados:** confira antes qual linha vai mudar com `SELECT`!\n1. Confira: `sqlite3 gym_legacy.db \"SELECT * FROM members WHERE id = 3;\"`\n2. Atualize só ela: `sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"`",
     "answer": "sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\"",
     "answerSteps": [
+      "sqlite3 gym_legacy.db \"SELECT * FROM members WHERE id = 3;\"",
       "sqlite3 gym_legacy.db \"UPDATE members SET city = 'Osaka' WHERE id = 3;\""
     ],
     "relatedCommands": [
@@ -4594,12 +4806,29 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Avançado",
     "lpicObjective": null,
-    "title": "Excluir registro específico com DELETE WHERE",
-    "description": "No banco gym_legacy.db, remova exclusivamente o membro de id = 10 (Leo) da tabela members.",
-    "hint": "Execute sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\"",
+    "title": "Excluir registro específico com DELETE FROM ... WHERE",
+    "description": "Mesma regra de segurança do `UPDATE`: **`DELETE FROM tabela` sem `WHERE` apaga a tabela inteira!** Por isso sempre filtramos pelo `id` exato.\nNo banco **`gym_legacy.db`**, remova exclusivamente o membro de `id = 10` (`Leo`) da tabela `members`.",
+    "hint": "Use `WHERE id = 10` para garantir que apenas 1 linha seja removida:\n`sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\"`",
     "answer": "sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\"",
     "answerSteps": [
       "sqlite3 gym_legacy.db \"DELETE FROM members WHERE id = 10;\""
+    ],
+    "relatedCommands": [
+      "sqlite3"
+    ]
+  },
+  {
+    "id": "db-join-simple",
+    "category": "database",
+    "categoryLabel": "SQL",
+    "difficulty": "Avançado",
+    "lpicObjective": null,
+    "title": "Seu primeiro JOIN: ligar duas tabelas (enrollments + plans)",
+    "description": "Em bancos relacionais não repetimos o nome do plano em cada matrícula: a tabela `enrollments` guarda só o número `plan_id`. O **`JOIN ... ON`** conecta duas tabelas cruzando a chave estrangeira (`e.plan_id = p.id`).\nEm **`gym_legacy.db`**, junte `enrollments` (`e`) com `plans` (`p`) para listar `e.member_id` e `p.name` de todas as matrículas.",
+    "hint": "**Como ler um `JOIN` de 2 tabelas passo a passo:**\n• `FROM enrollments e`: tabela principal com apelido curto `e`.\n• `JOIN plans p`: tabela que queremos trazer junto (apelido `p`).\n• `ON p.id = e.plan_id`: a \"ponte\" dizendo quais linhas combinam!\nExecute `sqlite3 gym_legacy.db \"SELECT e.member_id, p.name FROM enrollments e JOIN plans p ON p.id = e.plan_id;\"`",
+    "answer": "sqlite3 gym_legacy.db \"SELECT e.member_id, p.name FROM enrollments e JOIN plans p ON p.id = e.plan_id;\"",
+    "answerSteps": [
+      "sqlite3 gym_legacy.db \"SELECT e.member_id, p.name FROM enrollments e JOIN plans p ON p.id = e.plan_id;\""
     ],
     "relatedCommands": [
       "sqlite3"
@@ -4611,9 +4840,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Avançado",
     "lpicObjective": null,
-    "title": "Juntar tabelas para mostrar o plano atual",
-    "description": "A partir daqui, use o `gym_legacy.db`: dados migrados de um sistema antigo, com linhas de histórico de troca de plano. Mostre o `name` de cada membro e o nome do plano atual com JOIN.",
-    "hint": "Execute `sqlite3 gym_legacy.db \"SELECT m.name, p.name FROM members m JOIN enrollments e ON e.member_id = m.id JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL;\"`. As linhas de planos antigos têm a data de término em ended_at. Sem esse filtro, um membro vira várias linhas",
+    "title": "Encadear múltiplos JOINs e filtrar plano ativo",
+    "description": "Agora conectamos **3 tabelas** para ir do aluno até o plano! Em `gym_legacy.db`, `enrollments` guarda o histórico inteiro de matrículas — apenas o plano **atual** ainda não acabou (`ended_at IS NULL`).\nMostre o `name` de cada membro (`m.name`) e o nome do plano atual (`p.name`) usando dois `JOIN`s e `WHERE e.ended_at IS NULL`.",
+    "hint": "**Encadeando duas pontes (`members` → `enrollments` → `plans`):**\n• 1º `JOIN enrollments e ON e.member_id = m.id` liga aluno à matrícula.\n• 2º `JOIN plans p ON p.id = e.plan_id` liga matrícula ao nome do plano.\n• `WHERE e.ended_at IS NULL` evita repetir planos antigos encerrados!\nExecute `sqlite3 gym_legacy.db \"SELECT m.name, p.name FROM members m JOIN enrollments e ON e.member_id = m.id JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL;\"`",
     "answer": "sqlite3 gym_legacy.db \"SELECT m.name, p.name FROM members m JOIN enrollments e ON e.member_id = m.id JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL;\"",
     "answerSteps": [
       "sqlite3 gym_legacy.db \"SELECT m.name, p.name FROM members m JOIN enrollments e ON e.member_id = m.id JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL;\""
@@ -4628,9 +4857,9 @@ const ALL_LESSONS = [
     "categoryLabel": "SQL",
     "difficulty": "Avançado",
     "lpicObjective": null,
-    "title": "Encontrar membros que nunca se inscreveram",
-    "description": "No `gym_legacy.db`, mostre o `name` dos membros sem nenhuma linha em `enrollments` (nunca se inscreveram). O JOIN comum descarta quem não tem par; o LEFT JOIN os mantém.",
-    "hint": "Execute `sqlite3 gym_legacy.db \"SELECT m.name FROM members m LEFT JOIN enrollments e ON e.member_id = m.id WHERE e.id IS NULL;\"`. O LEFT JOIN mantém as linhas sem par e preenche as colunas que faltam com NULL. NOT IN ou NOT EXISTS também funcionam",
+    "title": "Encontrar quem ficou sem par com LEFT JOIN",
+    "description": "O `JOIN` normal esconde quem não tem matrícula! Já o **`LEFT JOIN`** mantém **todos** da tabela da esquerda (`members`), preenchendo com `NULL` as colunas de quem não tem par em `enrollments`.\nEm `gym_legacy.db`, mostre o `name` dos membros que **nunca se inscreveram** (`WHERE e.id IS NULL`).",
+    "hint": "**Truque clássico de entrevista (`LEFT JOIN` + `IS NULL`):**\n1. `FROM members m LEFT JOIN enrollments e ON e.member_id = m.id` traz os 9 alunos (quem nunca se inscreveu vem com `e.id = NULL`).\n2. Filtrar `WHERE e.id IS NULL` isola só quem nunca teve matrícula! (`NOT IN` ou `NOT EXISTS` também funcionam.)\nExecute `sqlite3 gym_legacy.db \"SELECT m.name FROM members m LEFT JOIN enrollments e ON e.member_id = m.id WHERE e.id IS NULL;\"`",
     "answer": "sqlite3 gym_legacy.db \"SELECT m.name FROM members m LEFT JOIN enrollments e ON e.member_id = m.id WHERE e.id IS NULL;\"",
     "answerSteps": [
       "sqlite3 gym_legacy.db \"SELECT m.name FROM members m LEFT JOIN enrollments e ON e.member_id = m.id WHERE e.id IS NULL;\""
@@ -4640,17 +4869,17 @@ const ALL_LESSONS = [
     ]
   },
   {
-    "id": "db-having",
+    "id": "db-boss-report",
     "category": "database",
     "categoryLabel": "SQL",
     "difficulty": "Avançado",
     "lpicObjective": null,
-    "title": "Filtrar grupos agregados com HAVING",
-    "description": "No banco gym.db, conte os membros por cidade (GROUP BY city) exibindo somente as cidades com mais de 2 membros usando HAVING COUNT(*) > 2.",
-    "hint": "Execute sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\"",
-    "answer": "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\"",
+    "title": "🏆 Projeto Final SQL: Receita mensal por plano ativo",
+    "description": "Combine quase tudo que você aprendeu em um relatório gerencial real! No `gym_legacy.db`, junte `enrollments` (`e`) e `plans` (`p`), considere apenas matrículas ativas (`WHERE e.ended_at IS NULL`), agrupe por plano (`GROUP BY p.name`) e mostre **nome do plano**, **total de ativos (`COUNT(*)`)** e **receita mensal (`SUM(p.monthly_fee)`)**, ordenando da maior receita para a menor (`ORDER BY ... DESC`).",
+    "hint": "**Quebre a query na ordem exata de leitura:**\n1. `SELECT p.name, COUNT(*) AS ativos, SUM(p.monthly_fee) AS total`\n2. `FROM enrollments e JOIN plans p ON p.id = e.plan_id`\n3. `WHERE e.ended_at IS NULL`\n4. `GROUP BY p.name`\n5. `ORDER BY total DESC;`\n```sql\nsqlite3 gym_legacy.db \"SELECT p.name, COUNT(*) AS ativos, SUM(p.monthly_fee) AS total FROM enrollments e JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL GROUP BY p.name ORDER BY total DESC;\"\n```",
+    "answer": "sqlite3 gym_legacy.db \"SELECT p.name, COUNT(*) AS ativos, SUM(p.monthly_fee) AS total FROM enrollments e JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL GROUP BY p.name ORDER BY total DESC;\"",
     "answerSteps": [
-      "sqlite3 gym.db \"SELECT city, COUNT(*) FROM members GROUP BY city HAVING COUNT(*) > 2;\""
+      "sqlite3 gym_legacy.db \"SELECT p.name, COUNT(*) AS ativos, SUM(p.monthly_fee) AS total FROM enrollments e JOIN plans p ON p.id = e.plan_id WHERE e.ended_at IS NULL GROUP BY p.name ORDER BY total DESC;\""
     ],
     "relatedCommands": [
       "sqlite3"
