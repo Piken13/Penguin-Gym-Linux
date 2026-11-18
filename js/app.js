@@ -368,6 +368,7 @@ class App {
     if (answerCode) {
       answerCode.textContent = lesson.answer || '';
     }
+    this.renderAnswerSteps(lesson);
     if (answerEl) {
       answerEl.classList.add('d-none');
     }
@@ -469,6 +470,71 @@ class App {
       bar.appendChild(chip);
       if (seen.size >= 3) break;
     }
+  }
+
+  renderAnswerSteps(lesson) {
+    const wrap = document.getElementById('answerStepsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const steps = lesson && Array.isArray(lesson.answerSteps) ? lesson.answerSteps : [];
+    if (steps.length <= 1) {
+      wrap.classList.add('d-none');
+      return;
+    }
+
+    const header = document.createElement('div');
+    header.className = 'answer-steps-title';
+    header.textContent = '🧩 Passo a passo (execute um comando por vez no terminal):';
+    wrap.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'answer-steps-list';
+
+    steps.forEach((step, idx) => {
+      const item = document.createElement('div');
+      item.className = 'answer-step-item';
+
+      const badge = document.createElement('span');
+      badge.className = 'answer-step-num';
+      badge.textContent = `Passo ${idx + 1}`;
+
+      const code = document.createElement('code');
+      code.className = 'answer-step-code';
+      code.textContent = step;
+
+      const actions = document.createElement('div');
+      actions.className = 'answer-step-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'btn-mini';
+      copyBtn.textContent = '📋';
+      copyBtn.title = `Copiar passo ${idx + 1}`;
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard?.writeText(step);
+        copyBtn.textContent = '✓';
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1200);
+      });
+
+      const runBtn = document.createElement('button');
+      runBtn.type = 'button';
+      runBtn.className = 'btn-mini btn-mini-primary';
+      runBtn.textContent = '▶';
+      runBtn.title = `Executar passo ${idx + 1}`;
+      runBtn.addEventListener('click', () => {
+        this.terminal.runCommandProgrammatically(step);
+      });
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(runBtn);
+      item.appendChild(badge);
+      item.appendChild(code);
+      item.appendChild(actions);
+      list.appendChild(item);
+    });
+
+    wrap.appendChild(list);
+    wrap.classList.remove('d-none');
   }
 
   selectFirstIncompleteLesson(catId) {
@@ -1267,10 +1333,19 @@ class App {
   formatInlineMarkdown(str) {
     if (!str) return '';
     const codeSlots = [];
-    const withPlaceholders = this.escapeHtml(str).replace(/`([^`]+)`/g, (_, code) => {
+    const allocSlot = (html) => {
       const idx = codeSlots.length;
-      codeSlots.push(`<code>${code}</code>`);
+      codeSlots.push(html);
       return `\x00CODE_${idx}\x00`;
+    };
+    const escaped = this.escapeHtml(str);
+    // Preserva blocos multi-linha ```...``` antes do inline `...`
+    const withBlocks = escaped.replace(/```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```[ \t]*\n?/g, (_, block) => {
+      const trimmed = block.replace(/\n+$/, '');
+      return allocSlot(`<pre class="inline-code-block"><code>${trimmed}</code></pre>`);
+    });
+    const withPlaceholders = withBlocks.replace(/`([^`]+)`/g, (_, code) => {
+      return allocSlot(`<code>${code}</code>`);
     });
     const formatted = withPlaceholders
       .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')

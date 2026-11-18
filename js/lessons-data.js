@@ -3375,8 +3375,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": "103.1",
     "title": "Calcular expressões matemáticas no terminal",
-    "description": "Calcule o resultado da operação (15 + 5) * 2 diretamente através dos recursos de cálculo interno do shell.",
-    "hint": "Execute echo $(( (15 + 5) * 2 ))",
+    "description": "No Bash, `echo 15 + 5` imprime texto literal em vez de somar! Para o shell calcular números inteiros, envolvemos a conta em `$(( ... ))` (**expansão aritmética**).\nCalcule `(15 + 5) * 2` usando `$(( ... ))` e exiba o resultado com `echo`.",
+    "hint": "**Por que parênteses duplos?**\n• `$(( conta ))` avisa ao Bash para resolver a operação matemática antes do `echo`.\n• Parênteses internos agrupam a soma como na matemática: `echo $(( (15 + 5) * 2 ))` → imprime `40`.",
     "answer": "echo $(( (15 + 5) * 2 ))",
     "answerSteps": [
       "echo $(( (15 + 5) * 2 ))"
@@ -3395,8 +3395,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": "105.1",
     "title": "Consultar código de status do comando anterior",
-    "description": "Exiba o valor retornado pelo último comando executado para saber se ele foi concluído com sucesso (0) ou erro.",
-    "hint": "Execute echo $?",
+    "description": "Todo comando no Linux termina deixando um código invisível na variável especial `$?`: **`0`** significa *sucesso*, qualquer outro número significa *erro*.\nExiba esse código no terminal com `echo $?`.",
+    "hint": "**Dica prática do dia a dia:**\n• `$?` sempre guarda o status apenas do **último** comando rodado (e um novo `echo $?` sobrescreve o anterior com `0`!).\n• Execute `echo $?` para conferir o status atual.",
     "answer": "echo $?",
     "answerSteps": [
       "echo $?"
@@ -3415,8 +3415,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": "103.1",
     "title": "Criar atalho de comando personalizado",
-    "description": "Crie um atalho rápido chamado 'c' que limpe a tela do terminal quando digitado.",
-    "hint": "Execute alias c='clear'",
+    "description": "Um `alias` cria um apelido curto para comandos que você digita toda hora.\nCrie um atalho chamado `'c'` que execute `clear` para limpar a tela.",
+    "hint": "**Pegadinha de sintaxe no Bash:**\n**Não coloque espaços ao redor do `=`!** (`alias c = 'clear'` dá erro).\n• O formato correto é: `alias c='clear'`",
     "answer": "alias c='clear'",
     "answerSteps": [
       "alias c='clear'"
@@ -3434,8 +3434,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": "103.1",
     "title": "Listar atalhos definidos no ambiente",
-    "description": "Exiba no terminal todos os aliases (atalhos) configurados na sessão atual.",
-    "hint": "Execute o comando alias",
+    "description": "Quer descobrir quais apelidos (como `ll` ou `la`) já existem na sua sessão atual?\nExecute o comando `alias` sem argumentos para listar todos.",
+    "hint": "Digite apenas `alias` e aperte Enter para listar todas as definições ativas no shell atual.",
     "answer": "alias",
     "answerSteps": [
       "alias"
@@ -3453,8 +3453,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": "103.1",
     "title": "Remover atalho de comando existente",
-    "description": "Desative e exclua a definição do atalho de comando 'c' que havia sido criado no shell.",
-    "hint": "Execute unalias c",
+    "description": "Se um `alias` está conflitando com um programa real ou você não quer mais aquele atalho na sessão, usamos `unalias`.\nRemova o atalho `'c'` que foi criado.",
+    "hint": "Passe apenas o nome do atalho (sem `=`): `unalias c`.",
     "answer": "unalias c",
     "answerSteps": [
       "unalias c"
@@ -3472,8 +3472,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Listar histórico numerado de comandos",
-    "description": "Exiba a lista de comandos digitados recentemente nesta sessão do shell.",
-    "hint": "Execute history",
+    "description": "Esqueceu o comando enorme que você rodou há 5 minutos? O Bash guarda um registro numerado dos comandos da sessão.\nExiba a lista com `history`.",
+    "hint": "Execute `history` para listar os comandos recentes numerados (dica: no terminal, `Ctrl+R` também faz busca rápida no histórico!).",
     "answer": "history",
     "answerSteps": [
       "history"
@@ -3490,8 +3490,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": "103.1",
     "title": "Reexecutar o último comando do histórico",
-    "description": "Execute instantaneamente o comando mais recente do histórico utilizando o operador rápido de repetição do shell.",
-    "hint": "Digite !! e pressione Enter",
+    "description": "O operador `!!` (*bang-bang*) substitui e executa exatamente o comando anterior do histórico — muito usado quando esquecemos de digitar `sudo` antes (ex.: `sudo !!`).\nRepita o comando mais recente (desde que válido) usando `!!`.",
+    "hint": "**Atenção antes de rodar:** `!!` repete o **último comando** digitado (se o último comando deu erro, rode um comando válido como `pwd` ou `ls` antes!).\nDepois digite `!!` e pressione Enter.",
     "answer": "!!",
     "answerSteps": [
       "!!"
@@ -3510,8 +3510,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Exportar uma variável de ambiente",
-    "description": "Crie e exporte a variável de ambiente GYM_ENV com o valor \"production\" para que processos filhos a enxerguem.",
-    "hint": "Execute export GYM_ENV=production",
+    "description": "Uma variável comum (`GYM_ENV=production`) fica visível só no terminal atual. O comando `export` transforma em **variável de ambiente**, permitindo que Node/Python/scripts filhos iniciados aqui leiam o valor.\nCrie e exporte `GYM_ENV` com o valor `\"production\"`.",
+    "hint": "**Lembre da regra do `=` no Bash:** zero espaços antes ou depois do `=`!\nExecute `export GYM_ENV=production` (confira se quiser com `echo $GYM_ENV`).",
     "answer": "export GYM_ENV=production",
     "answerSteps": [
       "export GYM_ENV=production"
@@ -3528,8 +3528,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "103.4",
     "title": "Redirecionar mensagens de erro para arquivo",
-    "description": "Tente listar o diretório protegido '/root' e grave exclusivamente as mensagens de erro geradas no arquivo 'erros.txt'.",
-    "hint": "Execute ls /root 2> erros.txt",
+    "description": "O operador `>` sozinho redireciona só a saída normal (canal **`1`**), deixando erros aparecerem na tela. Para capturar apenas **mensagens de erro** (canal **`2`** / `stderr`), usamos `2>`.\nTente listar `/root` (pasta protegida) salvando o erro em `'erros.txt'`.",
+    "hint": "**Os 3 canais padrão do Linux:** `0` = entrada (`stdin`), `1` = saída normal (`stdout`), `2` = saída de erro (`stderr`).\nPara desviar só o canal `2` sem espaço entre `2` e `>`: `ls /root 2> erros.txt`",
     "answer": "ls /root 2> erros.txt",
     "answerSteps": [
       "ls /root 2> erros.txt"
@@ -3549,8 +3549,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "103.4",
     "title": "Redirecionar tanto saídas quanto erros",
-    "description": "Liste os diretórios '/tmp' (válido) e '/root' (sem permissão) ao mesmo tempo, direcionando tanto a saída padrão quanto os erros para 'tudo.log'.",
-    "hint": "Execute ls /tmp /root &> tudo.log",
+    "description": "Ao rodar `ls /tmp /root`, `/tmp` gera saída normal (canal `1`) e `/root` gera erro de permissão (canal `2`). O operador `&>` junta os dois canais no mesmo arquivo.\nListe `/tmp` e `/root` enviando tudo para `'tudo.log'`.",
+    "hint": "`&> arquivo` é o atalho moderno do Bash que equivale a `> arquivo 2>&1` (envia stdout e stderr juntos).\nExecute `ls /tmp /root &> tudo.log` (e confira depois com `cat tudo.log`).",
     "answer": "ls /tmp /root &> tudo.log",
     "answerSteps": [
       "ls /tmp /root &> tudo.log"
@@ -3569,8 +3569,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "103.4",
     "title": "Descartar e silenciar mensagens de erro",
-    "description": "Tente listar o diretório restrito '/root' e descarte completamente quaisquer mensagens de erro sem exibir nada na tela.",
-    "hint": "Execute ls /root 2> /dev/null",
+    "description": "O arquivo especial `/dev/null` é o \"buraco negro\" do Linux: tudo que vai para lá é descartado instantaneamente. Muito útil em scripts quando você espera erros e não quer sujar a tela.\nRode `ls /root` descartando as mensagens de erro (`2>`).",
+    "hint": "Junte `2>` (canal de erro) apontando para `/dev/null`: `ls /root 2> /dev/null`.",
     "answer": "ls /root 2> /dev/null",
     "answerSteps": [
       "ls /root 2> /dev/null"
@@ -3588,8 +3588,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "103.4",
     "title": "Passar texto direto como entrada padrão",
-    "description": "Utilize o operador de Here-String (<<<) do Bash para alimentar a entrada padrão do comando cat diretamente com a string 'Penguin Gym'.",
-    "hint": "Execute cat <<< \"Penguin Gym\"",
+    "description": "Em vez de fazer `echo \"texto\" | comando`, o operador **Here-String (`<<<`)** injeta um texto curto diretamente na entrada padrão (`stdin`) de um comando.\nUse `cat` lendo `'Penguin Gym'` via `<<<`.",
+    "hint": "`<<<` funciona como uma versão de 1 linha do here-doc (`<<`): alimenta o `stdin` do comando à esquerda.\nExecute `cat <<< \"Penguin Gym\"`",
     "answer": "cat <<< \"Penguin Gym\"",
     "answerSteps": [
       "cat <<< \"Penguin Gym\""
@@ -3608,8 +3608,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "103.1",
     "title": "Executar comando em ambiente de subshell isolado",
-    "description": "Entre no diretório '/tmp' e mostre o caminho atual dentro de um ambiente isolado (subshell), sem alterar o diretório da sua sessão principal.",
-    "hint": "Execute (cd /tmp && pwd)",
+    "description": "Comandos dentro de parênteses `( ... )` rodam em uma **subshell** (um processo filho temporário). Se você der `cd` lá dentro, ao terminar você continua na sua pasta original!\nEntre em `/tmp` e exiba `pwd` dentro de uma subshell isolada.",
+    "hint": "Agrupe os comandos entre parênteses `( ... )` ligados por `&&`: `(cd /tmp && pwd)` (depois rode `pwd` fora e veja que você ainda está em `/home/user`!).",
     "answer": "(cd /tmp && pwd)",
     "answerSteps": [
       "(cd /tmp && pwd)"
@@ -3628,8 +3628,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "103.1",
     "title": "Navegar empilhando o diretório de origem",
-    "description": "Mude para o diretório '/etc' salvando a pasta atual na pilha interna de navegação de diretórios.",
-    "hint": "Execute pushd /etc",
+    "description": "Ao contrário de `cd`, o `pushd` funciona como um marcador de página: ele entra na nova pasta e **salva sua pasta anterior numa pilha** para voltar depois sem redigitar o caminho.\nNavegue até `/etc` usando `pushd`.",
+    "hint": "Pense em *push directory*: salva o diretório atual na pilha e vai para `/etc` → `pushd /etc`.",
     "answer": "pushd /etc",
     "answerSteps": [
       "pushd /etc"
@@ -3648,8 +3648,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Voltar ao diretório empilhado com popd",
-    "description": "Empilhe a pasta atual indo para /etc com pushd e depois retorne exatamente de onde veio usando popd.",
-    "hint": "Execute pushd /etc && popd",
+    "description": "O par de `pushd` é `popd` (*pop directory*): ele retira o último caminho salvo da pilha e retorna imediatamente para lá.\nVá para `/etc` com `pushd /etc` e depois volte com `popd`.",
+    "hint": "Use `&&` para ir com `pushd /etc` e retornar imediatamente para a pasta de origem com `popd`: `pushd /etc && popd`.",
     "answer": "pushd /etc && popd",
     "answerSteps": [
       "pushd /etc && popd"
@@ -3667,8 +3667,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Recarregar configurações do .bashrc na sessão atual",
-    "description": "Aplique imediatamente as definições e aliases do arquivo \"~/.bashrc\" no shell atual sem abrir outro terminal.",
-    "hint": "Execute source ~/.bashrc (ou . ~/.bashrc)",
+    "description": "Quando você edita o `~/.bashrc` para adicionar um alias ou variável, rodar `bash ~/.bashrc` cria um subshell e as mudanças somem! O comando `source` (ou `.`) executa **neste terminal mesmo**.\nRecarregue `~/.bashrc` na sessão atual.",
+    "hint": "`source` lê e aplica cada linha direto na sessão aberta (muito usado após editar variáveis ou aliases): `source ~/.bashrc` (ou a forma curta `. ~/.bashrc`).",
     "answer": "source ~/.bashrc",
     "answerSteps": [
       "source ~/.bashrc"
@@ -3684,8 +3684,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": "105.1",
     "title": "Executar arquivo de script de comandos",
-    "description": "Execute todas as instruções contidas no arquivo 'script.sh' através do interpretador shell.",
-    "hint": "Execute bash script.sh ou ./script.sh",
+    "description": "Um script `.sh` pode ser rodado passando-o diretamente como argumento para o interpretador `bash` (sem precisar esperar `chmod +x`).\nExecute o arquivo `'script.sh'` passando-o ao comando `bash`.",
+    "hint": "Use `bash <arquivo>` quando quiser que o interpretador Bash leia e execute o script: `bash script.sh` (ou `./script.sh` se já tiver `+x`).",
     "answer": "bash script.sh",
     "answerSteps": [
       "bash script.sh"
@@ -3704,8 +3704,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Tornar script executável e rodá-lo com ./",
-    "description": "O arquivo \"script.sh\" não tem permissão de execução. Adicione +x e execute-o diretamente usando ./script.sh.",
-    "hint": "Execute chmod +x script.sh && ./script.sh",
+    "description": "Ao baixar ou criar `script.sh`, ele vem sem permissão de execução (`x`), dando *\"Permissão negada\"* ao tentar `./script.sh`. O comando `chmod +x` libera a execução.\nAdicione `+x` em `script.sh` e rode com `./script.sh`.",
+    "hint": "**Dois passos clássicos:**\n1. Liberar permissão de execução: `chmod +x script.sh`\n2. Rodar apontando `./` (pasta atual): `./script.sh`\nNa mesma linha: `chmod +x script.sh && ./script.sh`",
     "answer": "chmod +x script.sh && ./script.sh",
     "answerSteps": [
       "chmod +x script.sh && ./script.sh"
@@ -3722,8 +3722,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Passar argumento posicional ($1) para um script",
-    "description": "O script \"saudacao.sh\" usa $1 para cumprimentar alguém. Execute-o passando \"Penguin\" como primeiro argumento.",
-    "hint": "Execute bash saudacao.sh Penguin",
+    "description": "Scripts recebem parâmetros da linha de comando nas variáveis `$1` (1º argumento), `$2` (2º argumento), etc. O arquivo `saudacao.sh` já usa `$1` internamente.\nExecute `saudacao.sh` passando `Penguin` como 1º argumento.",
+    "hint": "Escreva o parâmetro logo depois do nome do script, separado por espaço: `bash saudacao.sh Penguin` (aqui `$1` recebe `\"Penguin\"`).",
     "answer": "bash saudacao.sh Penguin",
     "answerSteps": [
       "bash saudacao.sh Penguin"
@@ -3739,8 +3739,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Capturar saída de comando com $(...)",
-    "description": "Use substituição de comando $(...) dentro de echo para imprimir \"Kernel: Linux\" dinamicamente a partir do comando uname.",
-    "hint": "Execute echo \"Kernel: $(uname)\"",
+    "description": "**Substituição de comando `$(...)`** executa o comando lá dentro e cola a saída como texto — essencial para montar mensagens dinâmicas e variáveis em automações.\nUse `echo` com `$(uname)` para imprimir `\"Kernel: Linux\"` dinamicamente.",
+    "hint": "Aspas duplas `\"...\"` ainda permitem que `$(...)` seja executado pelo Bash (enquanto aspas simples `'...'` travam como texto literal!):\n`echo \"Kernel: $(uname)\"`",
     "answer": "echo \"Kernel: $(uname)\"",
     "answerSteps": [
       "echo \"Kernel: $(uname)\""
@@ -3757,8 +3757,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Executar fallback em caso de falha (||)",
-    "description": "Tente ler \"inexistente.txt\" com cat e, caso falhe, exiba \"Arquivo ausente\" usando o operador ||.",
-    "hint": "Execute cat inexistente.txt || echo \"Arquivo ausente\"",
+    "description": "Diferente de `&&` (que roda o 2º comando só no **sucesso**), o operador **`||`** (*OU*) roda o comando da direita **apenas se o da esquerda falhar**.\nTente ler `inexistente.txt` com `cat` e, se falhar, imprima `\"Arquivo ausente\"` usando `||`.",
+    "hint": "Lê-se literalmente: *\"faça isso OU, se der erro, faça aquilo\"*.\nExecute `cat inexistente.txt || echo \"Arquivo ausente\"`",
     "answer": "cat inexistente.txt || echo \"Arquivo ausente\"",
     "answerSteps": [
       "cat inexistente.txt || echo \"Arquivo ausente\""
@@ -3775,8 +3775,8 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": "105.2",
     "title": "Criar múltiplos arquivos com laço de repetição",
-    "description": "Crie em um único comando os arquivos 'log_1.txt', 'log_2.txt' e 'log_3.txt' utilizando um laço for no terminal.",
-    "hint": "Execute for i in 1 2 3; do touch \"log_$i.txt\"; done",
+    "description": "A estrutura `for VAR in LISTA; do COMANDO; done` repete um bloco trocando `VAR` por cada item da lista.\nCrie `'log_1.txt'`, `'log_2.txt'` e `'log_3.txt'` de uma vez usando um laço `for`.",
+    "hint": "**Anatomia do `for` em uma linha:**\n• `for i in 1 2 3;` → define os valores de `i`\n• `do touch \"log_$i.txt\";` → executa para cada valor (`$i` lê a variável)\n• `done` → fecha o laço\nExecute `for i in 1 2 3; do touch \"log_$i.txt\"; done`",
     "answer": "for i in 1 2 3; do touch \"log_$i.txt\"; done",
     "answerSteps": [
       "for i in 1 2 3; do touch \"log_$i.txt\"; done"
@@ -3795,8 +3795,8 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": "105.2",
     "title": "Testar existência de arquivo com condicional",
-    "description": "Escreva uma estrutura condicional no terminal que verifique se o arquivo 'documents/readme.txt' existe e imprima \"Existe\" em caso positivo.",
-    "hint": "Execute if [ -f documents/readme.txt ]; then echo \"Existe\"; fi",
+    "description": "Em Bash, `if [ -f caminho ]; then ...; fi` verifica se o caminho existe e é um arquivo comum (`-f`). **Regra crítica:** `[` e `]` exigem espaços em volta deles!\nVerifique se `'documents/readme.txt'` existe e imprima `\"Existe\"` se for verdadeiro.",
+    "hint": "**Pegadinha clássica:** `[ -f arquivo ]` PRECISA de espaço depois de `[` e antes de `]`, porque `[` é um comando! E `fi` (if ao contrário) fecha o bloco.\nExecute `if [ -f documents/readme.txt ]; then echo \"Existe\"; fi`",
     "answer": "if [ -f documents/readme.txt ]; then echo \"Existe\"; fi",
     "answerSteps": [
       "if [ -f documents/readme.txt ]; then echo \"Existe\"; fi"
@@ -4663,8 +4663,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Seu primeiro robô com Shebang (#!/bin/bash)",
-    "description": "Todo script de automação começa com a linha `#!/bin/bash` (shebang) para indicar qual interpretador deve executá-lo.\nCrie `organiza.sh` contendo `#!/bin/bash` e `echo \"Iniciando automacao...\"`, torne-o executável com `chmod +x organiza.sh` e rode `./organiza.sh`.",
-    "hint": "Use `nano organiza.sh` ou gere via here-doc:\n`cat << 'EOF' > organiza.sh`\n`#!/bin/bash`\n`echo \"Iniciando automacao...\"`\n`EOF`",
+    "description": "Um script Bash é só um arquivo de texto com comandos em sequência. Na 1ª linha colocamos `#!/bin/bash` (**shebang**) para avisar ao Linux qual programa deve ler o arquivo.\nCrie `organiza.sh` com `#!/bin/bash` e `echo \"Iniciando automacao...\"`, dê permissão de execução com `chmod +x` e rode com `./organiza.sh`.",
+    "hint": "**Por que 3 passos?**\n1. **Criar o arquivo:** abra com `nano organiza.sh` ou gere direto pelo terminal com **here-doc** (`cat << 'EOF' > ...` grava tudo até encontrar a palavra `EOF`).\n2. **Dar permissão (`chmod +x`):** por padrão, arquivos novos não podem rodar como programas; `+x` ativa essa permissão.\n3. **Usar `./` ao executar:** por segurança, o Linux não roda scripts da pasta atual pelo nome solto — `./` significa *\"nesta pasta aqui\"*.\n```bash\ncat << 'EOF' > organiza.sh\n#!/bin/bash\necho \"Iniciando automacao...\"\nEOF\nchmod +x organiza.sh\n./organiza.sh\n```",
     "answer": "cat << 'EOF' > organiza.sh\n#!/bin/bash\necho \"Iniciando automacao...\"\nEOF\nchmod +x organiza.sh && ./organiza.sh",
     "answerSteps": [
       "cat << 'EOF' > organiza.sh\n#!/bin/bash\necho \"Iniciando automacao...\"\nEOF",
@@ -4684,8 +4684,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Nomes dinâmicos com variáveis e $(date)",
-    "description": "Em automações diárias, gerar arquivos com data automática evita sobrescrever relatórios anteriores.\nCrie a pasta `~/logs` e gere um arquivo com a data de hoje usando `$(date +%Y-%m-%d)` chamado `relatorio_<DATA>.log` dentro de `~/logs/`.",
-    "hint": "Execute `mkdir -p ~/logs && echo \"Status OK\" > ~/logs/relatorio_$(date +%Y-%m-%d).log`",
+    "description": "Em scripts diários, colocar a data no nome do arquivo evita apagar o log de ontem. O formato `$(comando)` (**substituição de comando**) roda o comando interno primeiro e cola o texto resultante no lugar.\nCrie a pasta `~/logs` (usando `-p` para não falhar se já existir) e gere dentro dela `relatorio_<DATA>.log` usando `$(date +%Y-%m-%d)`.",
+    "hint": "**Entendendo cada pedaço:**\n• Teste antes no terminal: `date +%Y-%m-%d` imprime a data de hoje (ex.: `2026-11-18`, onde `%Y`=ano, `%m`=mês, `%d`=dia).\n• `~` representa sua pasta pessoal (`/home/user`), e `mkdir -p` cria a pasta sem reclamar se ela já existir.\n• Ao escrever `relatorio_$(date +%Y-%m-%d).log`, o Bash troca o bloco `$(...)` pela data automaticamente!\n```bash\nmkdir -p ~/logs\necho \"Status OK\" > ~/logs/relatorio_$(date +%Y-%m-%d).log\n```",
     "answer": "mkdir -p ~/logs && echo \"Status OK\" > ~/logs/relatorio_$(date +%Y-%m-%d).log",
     "answerSteps": [
       "mkdir -p ~/logs",
@@ -4704,8 +4704,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Gravar saída e erros em log automático (>> e 2>&1)",
-    "description": "Scripts agendados rodam sem ninguém olhando a tela: se não registrarem saída e erros em arquivo, falhas passam despercebidas.\nExecute `./rotina.sh` acumulando tanto stdout quanto stderr em `automacao.log` (`>> automacao.log 2>&1`).",
-    "hint": "Execute `./rotina.sh >> automacao.log 2>&1`",
+    "description": "Quando um script roda em segundo plano, ninguém está olhando a tela. No Linux existem dois canais de texto: o **`1` (`stdout`)** para saídas normais e o **`2` (`stderr`)** para erros.\nJá existe um script `./rotina.sh` na sua pasta. Execute-o acumulando saída normal **e** erros no fim de `automacao.log` (`>> automacao.log 2>&1`).",
+    "hint": "**Como ler essa sintaxe sem mistério:**\n• Primeiro rode `./rotina.sh` sozinho para ver o que sai (ele imprime um texto normal e tenta listar `/root`, gerando um erro).\n• `>> automacao.log`: **anexa** (`>>`) a saída normal (canal `1`) ao fim do arquivo, sem apagar logs anteriores.\n• `2>&1`: redireciona o canal **`2`** (erros) para o **mesmo destino atual do canal `1`** (`&1`).\n• **Pegadinha clássica:** `2>&1` tem que vir **depois** de `>> automacao.log`! (O atalho `&>> automacao.log` faz o mesmo.)\n```bash\n./rotina.sh >> automacao.log 2>&1\ncat automacao.log\n```",
     "answer": "./rotina.sh >> automacao.log 2>&1",
     "answerSteps": [
       "./rotina.sh >> automacao.log 2>&1"
@@ -4723,8 +4723,8 @@ const ALL_LESSONS = [
     "difficulty": "Iniciante",
     "lpicObjective": null,
     "title": "Criar pastas de organização de uma vez ({...})",
-    "description": "Antes de um script organizar sua pasta `downloads/`, ele deve garantir que os diretórios de destino existam.\nCrie de uma única vez `downloads/imagens`, `downloads/documentos` e `downloads/arquivos` usando expansão de chaves.",
-    "hint": "Execute `mkdir -p downloads/{imagens,documentos,arquivos}`",
+    "description": "Um bom script prepara suas pastas antes de mover arquivos. Com **expansão de chaves `{a,b,c}`**, o Bash gera vários caminhos a partir de um prefixo comum em uma linha só.\nCrie `downloads/imagens`, `downloads/documentos` e `downloads/arquivos` em um único comando `mkdir -p`.",
+    "hint": "**Como `{...}` funciona na prática:**\nAntes de executar o `mkdir`, o Bash expande `downloads/{imagens,documentos,arquivos}` exatamente para:\n`mkdir -p downloads/imagens downloads/documentos downloads/arquivos`\n• Use `-p` para o script poder rodar novamente amanhã sem falhar com *\"Diretório já existe\"*.\n• **Pegadinha:** **não coloque espaços depois da vírgula** dentro de `{...}`, senão o Bash não expande!",
     "answer": "mkdir -p downloads/{imagens,documentos,arquivos}",
     "answerSteps": [
       "mkdir -p downloads/{imagens,documentos,arquivos}"
@@ -4742,8 +4742,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Triagem automática em lote por extensão (Globbing)",
-    "description": "A pasta `downloads/` está misturada com `.pdf`, `.jpg`, `.png` e `.zip`.\nMova todos os `.pdf` para `downloads/documentos/` e todas as imagens (`.jpg` e `.png`) para `downloads/imagens/` usando padrões `*`.",
-    "hint": "Execute `mv downloads/*.pdf downloads/documentos/ && mv downloads/*.jpg downloads/*.png downloads/imagens/`",
+    "description": "A pasta `downloads/` tem arquivos `.pdf`, `.jpg`, `.png` e `.zip` misturados (confira antes com `ls downloads`). O curinga `*` (**globbing**) combina com qualquer texto no nome.\nMova todos os `.pdf` para `downloads/documentos/` e todas as imagens (`.jpg` e `.png`) para `downloads/imagens/`.",
+    "hint": "**Regra de ouro do `mv` com vários arquivos:**\nVocê pode passar **várias origens** seguidas e o **último argumento** (terminando em `/`) é a pasta de destino.\n• Passo 1 (PDFs): `mv downloads/*.pdf downloads/documentos/`\n• Passo 2 (Imagens `.jpg` e `.png` juntos): `mv downloads/*.jpg downloads/*.png downloads/imagens/`\n• Use `&&` entre eles se quiser rodar na mesma linha (o 2º só roda se o 1º não der erro).",
     "answer": "mv downloads/*.pdf downloads/documentos/ && mv downloads/*.jpg downloads/*.png downloads/imagens/",
     "answerSteps": [
       "mv downloads/*.pdf downloads/documentos/",
@@ -4762,8 +4762,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Script organizador com laço for e condicional [ -f ]",
-    "description": "Em vez de digitar `mv` todo dia, transforme a triagem em um script executável!\nCrie `organizar_downloads.sh` com um laço `for` e teste `[ -f \"$f\" ]` para mover `.pdf` para `downloads/documentos/` e `.png` para `downloads/imagens/`. Dê `+x` e execute `./organizar_downloads.sh`.",
-    "hint": "Use `cat << 'EOF' > organizar_downloads.sh` com dois blocos `for` (ou `[[ \"$f\" == *.pdf ]]`) e rode `chmod +x organizar_downloads.sh && ./organizar_downloads.sh`.",
+    "description": "Agora vamos transformar aquela triagem manual em um robô reutilizável! Quando uma pasta não tem nenhum `.pdf`, um `for` simples mantém o padrão literal `*.pdf` e o `mv` falha — por isso testamos `[ -f \"$f\" ]` (*\"esse item existe como arquivo?\"*).\nCrie `organizar_downloads.sh` com laço `for` e `[ -f \"$f\" ]` para mover `.pdf` para `downloads/documentos/` e `.png` para `downloads/imagens/`, dê `+x` e rode `./organizar_downloads.sh`.",
+    "hint": "**Anatomia do script (3 regras vitais do Bash):**\n• `for f in lista; do ... done`: percorre cada item guardando na variável `f` (`\"$f\"` com aspas protege nomes com espaço).\n• `[ -f \"$f\" ]`: **espaços logo após `[` e antes de `]` são obrigatórios!** `-f` verifica se é um arquivo real.\n• Monte o arquivo (com `nano` ou `cat << 'EOF'`), dê `chmod +x organizar_downloads.sh` e rode `./organizar_downloads.sh`:\n```bash\n#!/bin/bash\nfor f in downloads/*.pdf; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/documentos/\n  fi\ndone\nfor f in downloads/*.png; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/imagens/\n  fi\ndone\n```",
     "answer": "cat << 'EOF' > organizar_downloads.sh\n#!/bin/bash\nfor f in downloads/*.pdf; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/documentos/\n  fi\ndone\nfor f in downloads/*.png; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/imagens/\n  fi\ndone\nEOF\nchmod +x organizar_downloads.sh && ./organizar_downloads.sh",
     "answerSteps": [
       "cat << 'EOF' > organizar_downloads.sh\n#!/bin/bash\nfor f in downloads/*.pdf; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/documentos/\n  fi\ndone\nfor f in downloads/*.png; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/imagens/\n  fi\ndone\nEOF",
@@ -4783,8 +4783,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Faxina automática e segura de temporários (*.tmp)",
-    "description": "Em scripts de limpeza, evite `rm -rf` genérico: filtre exatamente o tipo de arquivo descartável antes de apagar.\nRemova apenas arquivos `.tmp` dentro de `downloads/` preservando `importante.txt`.",
-    "hint": "Execute `find downloads -type f -name \"*.tmp\" -delete`",
+    "description": "Em scripts de manutenção, sair dando `rm -rf` é receita para desastre. O `find` permite filtrar exatamente o que será apagado — e você pode **listar primeiro antes de apagar**!\nApague apenas arquivos `.tmp` dentro de `downloads/` mantendo `importante.txt` intacto.",
+    "hint": "**Boa prática em 2 etapas (teste antes de apagar):**\n1. Primeiro liste o que casa com o filtro: `find downloads -type f -name \"*.tmp\"` (`-type f` garante só arquivos; as aspas em `\"*.tmp\"` entregam o padrão intacto ao `find`).\n2. Confirmou a lista? Adicione `-delete` no final para apagar com segurança:\n`find downloads -type f -name \"*.tmp\" -delete`",
     "answer": "find downloads -type f -name \"*.tmp\" -delete",
     "answerSteps": [
       "find downloads -type f -name \"*.tmp\" -delete"
@@ -4802,8 +4802,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Espelhamento incremental local com rsync -av",
-    "description": "Diferente de `cp -r` que recopia tudo sempre, o `rsync` analisa diferenças e transfere apenas arquivos novos ou modificados.\nEspelhe o conteúdo de `documents/` para `backups/documents/` usando `rsync -av`.",
-    "hint": "Execute `rsync -av documents/ backups/documents/`",
+    "description": "Diferente do `cp -r` que recopia tudo do zero toda vez, o `rsync` compara os arquivos e transfere apenas o que é novo ou mudou. A barra `/` no fim de `documents/` significa *\"copie os arquivos de dentro da pasta\"*.\nEspelhe `documents/` para `backups/documents/` usando `rsync` com `-a` (*archive*) e `-v` (*verbose*).",
+    "hint": "**Decodificando as opções do `rsync`:**\n• `-a` (**archive**): copia subpastas inteiras preservando permissões e datas.\n• `-v` (**verbose**): mostra na tela o nome de cada arquivo transferido.\n• **Atenção à barra `/`:** `documents/` (com `/`) copia o *conteúdo* para `backups/documents/`; sem a barra criaria `backups/documents/documents/`.\n• Comando final: `rsync -av documents/ backups/documents/`",
     "answer": "rsync -av documents/ backups/documents/",
     "answerSteps": [
       "rsync -av documents/ backups/documents/"
@@ -4821,8 +4821,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Simular backup destrutivo com --dry-run (-n) antes de aplicar",
-    "description": "A opção `--delete` remove do destino arquivos que não existem mais na origem — perigosa sem revisão prévia! A pasta `backups/documents/` possui `obsoleto.txt`.\nSimule `rsync --delete` com `-n` (`--dry-run`) para conferir o que seria apagado sem apagar nada ainda.",
-    "hint": "Execute `rsync -avn --delete documents/ backups/documents/`",
+    "description": "A opção `--delete` transforma o `rsync` em um espelho exato, **apagando no destino** arquivos que não existem mais na origem — como `obsoleto.txt` dentro de `backups/documents/`.\nNunca rode `--delete` no escuro! Adicione **`-n`** (`--dry-run`) para **simular** o comando e ver o que seria apagado sem remover nada de verdade.",
+    "hint": "**Por que usar `-n` (`--dry-run`) sempre?**\nEle funciona como um modo de ensaio (*DRY RUN*): imprime exatamente `deleting obsoleto.txt`, mas não apaga nem altera nenhum arquivo.\n• Junte `-a` (archive), `-v` (verbose) e `-n` (dry-run): `-avn`, seguido de `--delete`.\n• Comando completo: `rsync -avn --delete documents/ backups/documents/`",
     "answer": "rsync -avn --delete documents/ backups/documents/",
     "answerSteps": [
       "rsync -avn --delete documents/ backups/documents/"
@@ -4839,8 +4839,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Backup compactado validando código de retorno (&&)",
-    "description": "Um bom script de backup nunca assume que deu certo: ele valida o status de retorno (`0`) antes de registrar sucesso.\nCrie/execute `backup.sh` compactando `documents` em `backups/docs_backup.tar.gz` com `tar -czf` e só exiba `Backup OK` se o `tar` tiver sucesso.",
-    "hint": "Crie `backup.sh` com `tar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"`, dê `+x` e execute `./backup.sh`.",
+    "description": "No Linux, todo comando termina devolvendo um código numérico: **`0` = sucesso**, diferente de `0` = falha. Um script confiável usa **`&&`** (*\"só rode a próxima linha se a anterior deu `0`\"*) antes de anunciar sucesso.\nCrie e execute `backup.sh` compactando `documents` em `backups/docs_backup.tar.gz` (`tar -czf`) e imprimindo `Backup OK` somente se o `tar` der certo.",
+    "hint": "**Decifrando `tar -czf` + `&&`:**\n• **`c`** = *create* (criar arquivo `.tar`), **`z`** = comprimir com g**z**ip (`.tar.gz`), **`f`** = *file* (o nome do arquivo de saída vem logo em seguida!).\n• Ordem obrigatória após `-f`: primeiro o **destino** (`backups/docs_backup.tar.gz`), depois a **origem** (`documents`).\n• Depois crie com `nano` ou `cat << 'EOF'`, dê `chmod +x backup.sh` e rode `./backup.sh`:\n```bash\n#!/bin/bash\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\n```",
     "answer": "cat << 'EOF' > backup.sh\n#!/bin/bash\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\nEOF\nchmod +x backup.sh && ./backup.sh",
     "answerSteps": [
       "cat << 'EOF' > backup.sh\n#!/bin/bash\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\nEOF",
@@ -4860,8 +4860,8 @@ const ALL_LESSONS = [
     "difficulty": "Intermediário",
     "lpicObjective": null,
     "title": "Sentinela de disco com df, awk e condicional -gt",
-    "description": "Scripts de monitoramento tomam decisões lendo métricas do sistema.\nNo simulador, a partição `/` está em `24%` de uso. Crie e rode `checa_disco.sh` extraindo esse percentual (`df -h / | awk '/sda1/ {print $5}' | tr -d '%'`) e imprimindo `ALERTA: Disco alto` quando for maior que `20` (`-gt 20`).",
-    "hint": "Use `cat << 'EOF' > checa_disco.sh` calculando `USO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')` e testando `if [ \"$USO\" -gt 20 ]; then echo \"ALERTA: Disco alto (${USO}%)\"; fi`.",
+    "description": "Scripts de monitoramento leem métricas, limpam o texto para extrair só o número e comparam no `if`. Aqui a raiz `/` está com `24%` de uso.\nCrie e execute `checa_disco.sh` extraindo apenas o número `24` (via `df -h /`, `awk` e `tr -d '%'`) e imprimindo `ALERTA: Disco alto` se ele for maior que `20` (`-gt 20`).",
+    "hint": "**Monte por partes (teste o passo 1 no terminal antes!):**\n1. Rode `df -h /` e veja a tabela: a **5ª coluna (`$5`)** da linha `/dev/sda1` mostra `24%`.\n2. Extraia e limpe o `%`: `df -h / | awk '/sda1/ {print $5}' | tr -d '%'` → devolve só `24`!\n3. Salve em uma variável **sem espaços no `=`**: `USO=$(...)`.\n4. **Por que `-gt` em vez de `>`?** Dentro de `[ ... ]`, `>` redireciona arquivo! Para comparar **números** no Bash use `-gt` (*greater than*, maior que). (`${USO}` evita grudar o `%` no nome da variável).\n```bash\n#!/bin/bash\nUSO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')\nif [ \"$USO\" -gt 20 ]; then\n  echo \"ALERTA: Disco alto (${USO}%)\"\nfi\n```",
     "answer": "cat << 'EOF' > checa_disco.sh\n#!/bin/bash\nUSO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')\nif [ \"$USO\" -gt 20 ]; then\n  echo \"ALERTA: Disco alto (${USO}%)\"\nfi\nEOF\nchmod +x checa_disco.sh && ./checa_disco.sh",
     "answerSteps": [
       "cat << 'EOF' > checa_disco.sh\n#!/bin/bash\nUSO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')\nif [ \"$USO\" -gt 20 ]; then\n  echo \"ALERTA: Disco alto (${USO}%)\"\nfi\nEOF",
@@ -4881,8 +4881,8 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Autocorreção (Watchdog) de serviço com systemctl",
-    "description": "O serviço `nginx` caiu! Em vez de acordar às 3h da manhã, automações de health-check verificam se o serviço está ativo e o reiniciam automaticamente em caso de falha (`||` ou `if ! systemctl is-active --quiet nginx`).\nCrie `watchdog.sh`, torne executável e rode `./watchdog.sh` para recuperar o Nginx.",
-    "hint": "Crie `watchdog.sh` com `systemctl is-active --quiet nginx || sudo systemctl start nginx` (ou usando `if ! systemctl ...`), dê `chmod +x` e execute `./watchdog.sh`.",
+    "description": "O serviço `nginx` caiu! Scripts *watchdog* checam silenciosamente se ele está no ar com `systemctl is-active --quiet nginx` (retorna `0` se ativo ou erro `!= 0` se parado) e o reiniciam caso contrário.\nCrie `watchdog.sh`, torne executável e rode `./watchdog.sh` para religar o `nginx`.",
+    "hint": "**Dúvida comum de júnior: por que aqui NÃO usamos `[ ... ]` no `if`?**\n• No Bash, `if` sempre testa o **código de saída** de um comando! Para comparar variáveis usamos `[ ... ]`, mas `systemctl is-active --quiet nginx` já devolve `0` (ativo) ou erro (parado) — então passamos ele **direto** no `if`!\n• O `!` inverte o resultado (*\"se **NÃO** estiver ativo, inicie com `sudo`\"*). Outra forma curta válida é `cmd1 || cmd2` (*\"rode a direita só se a esquerda falhar\"*).\n```bash\n#!/bin/bash\nif ! systemctl is-active --quiet nginx; then\n  sudo systemctl start nginx\nfi\n```",
     "answer": "cat << 'EOF' > watchdog.sh\n#!/bin/bash\nif ! systemctl is-active --quiet nginx; then\n  sudo systemctl start nginx\nfi\nEOF\nchmod +x watchdog.sh && ./watchdog.sh",
     "answerSteps": [
       "cat << 'EOF' > watchdog.sh\n#!/bin/bash\nif ! systemctl is-active --quiet nginx; then\n  sudo systemctl start nginx\nfi\nEOF",
@@ -4902,8 +4902,8 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Agendar execução diária automática no crontab",
-    "description": "O `cron` usa 5 campos antes do comando: `minuto hora dia mês dia_da_semana`.\nAgende `/home/user/organizar_downloads.sh` para rodar todos os dias às `02:30` (`30 2 * * *`), redirecionando logs para `/home/user/cron.log` (`>> ... 2>&1`).",
-    "hint": "Você pode editar via `crontab -e` ou instalar via pipe: `printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab -`",
+    "description": "Um script só vira automação de verdade quando roda sozinho no horário programado! O `cron` recebe 5 campos de horário antes do comando — **atenção: `minuto` vem ANTES da `hora`** — e caminhos completos (`/home/user/...`).\nAgende `/home/user/organizar_downloads.sh` para todo dia às **02:30** (`30 2 * * *`), gravando logs em `/home/user/cron.log` (`>> ... 2>&1`).",
+    "hint": "**Mapa dos 5 campos do cron (`*` = todos):**\n```bash\n# min  hora  dia_mês  mês  dia_semana  comando\n  30    2       *      *       *       /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\n```\n• **Por que caminho completo (`/home/user/...`)?** O `cron` roda em segundo plano sem saber em qual pasta você estava no terminal.\n• Você pode abrir o editor com `crontab -e`, colar essa linha e gravar (`^O` e `^X`), **ou** instalar direto via pipe e conferir com `crontab -l`:\n`printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab - && crontab -l`",
     "answer": "printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab - && crontab -l",
     "answerSteps": [
       "printf '30 2 * * * /home/user/organizar_downloads.sh >> /home/user/cron.log 2>&1\\n' | crontab -",
@@ -4922,8 +4922,8 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "🏆 Projeto Final Bash: Rotina Noturna Autônoma",
-    "description": "Combine tudo em um único robô `rotina_noturna.sh` que: 1) move `.pdf` de `downloads/` para `downloads/documentos/`, 2) apaga `.tmp` em `downloads/`, 3) sincroniza `documents/` em `backups/documents/` com `rsync -a`, e 4) registra `Rotina OK` em `rotina.log`.\nCrie, execute `./rotina_noturna.sh` e agende às `03:00` no crontab gravando saída em `rotina.log`!",
-    "hint": "Monte `rotina_noturna.sh`, dê `chmod +x`, execute `./rotina_noturna.sh` e agende `0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1` no `crontab -`.",
+    "description": "Hora de juntar tudo em um fluxo real de produção! Crie `rotina_noturna.sh` com 4 etapas dentro dele: (1) mover `downloads/*.pdf` para `downloads/documentos/`, (2) apagar `.tmp` de `downloads/` com `find`, (3) espelhar `documents/` em `backups/documents/` via `rsync -a`, e (4) gravar `Rotina OK` em `rotina.log`.\nDepois dê `+x`, **teste rodando `./rotina_noturna.sh` antes** e agende às **03:00** (`0 3 * * *`) no `crontab` apontando para `/home/user/rotina.log`.",
+    "hint": "**Quebre o desafio em 4 passos (nunca agende no cron sem testar antes!):**\n1. Crie `rotina_noturna.sh` juntando um comando abaixo do outro:\n```bash\n#!/bin/bash\nmv downloads/*.pdf downloads/documentos/\nfind downloads -type f -name \"*.tmp\" -delete\nrsync -a documents/ backups/documents/\necho \"Rotina OK\" >> rotina.log\n```\n2. Dê permissão: `chmod +x rotina_noturna.sh`\n3. Teste na mão e confira `cat rotina.log`: `./rotina_noturna.sh`\n4. Agende às `03:00` (`minuto=0`, `hora=3`) com caminhos completos:\n`printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -`",
     "answer": "cat << 'EOF' > rotina_noturna.sh\n#!/bin/bash\nmv downloads/*.pdf downloads/documentos/\nfind downloads -type f -name \"*.tmp\" -delete\nrsync -a documents/ backups/documents/\necho \"Rotina OK\" >> rotina.log\nEOF\nchmod +x rotina_noturna.sh && ./rotina_noturna.sh && printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -",
     "answerSteps": [
       "cat << 'EOF' > rotina_noturna.sh\n#!/bin/bash\nmv downloads/*.pdf downloads/documentos/\nfind downloads -type f -name \"*.tmp\" -delete\nrsync -a documents/ backups/documents/\necho \"Rotina OK\" >> rotina.log\nEOF",
@@ -4945,7 +4945,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "A base do Ansible: gerar par de chaves SSH",
     "description": "Ao contrário de outras ferramentas, o Ansible não exige instalar agentes nos servidores — ele opera sobre **SSH**! Por isso, o primeiro passo do controlador é ter um par de chaves criptográficas em `~/.ssh/`.\nGere uma chave Ed25519 usando `ssh-keygen -t ed25519`.",
-    "hint": "Execute `ssh-keygen -t ed25519`",
+    "hint": "**Entendendo as flags:**\n• `-t ed25519`: escolhe o algoritmo moderno **Ed25519** (rápido e seguro, padrão atual em relação ao antigo RSA).\n• Ele gera a chave privada (`id_ed25519`) e a chave pública (`id_ed25519.pub`) dentro de `~/.ssh/`.\nExecute `ssh-keygen -t ed25519`",
     "answer": "ssh-keygen -t ed25519",
     "answerSteps": [
       "ssh-keygen -t ed25519"
@@ -4964,7 +4964,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Criar arquivo de Inventário INI (inventory.ini)",
     "description": "O inventário diz ao Ansible quais servidores existem e como se agrupam por função.\nCrie `inventory.ini` no diretório atual definindo o grupo `[webservers]` com `web1` e `web2`, e o grupo `[databases]` com `db1`.",
-    "hint": "Use `cat << 'EOF' > inventory.ini` (ou edite com `nano inventory.ini`).",
+    "hint": "**Formato INI:** nomes entre colchetes `[grupo]` definem o grupo, e cada servidor vai em uma linha abaixo dele.\nVocê pode criar com `nano inventory.ini` ou direto via here-doc:\n```ini\n[webservers]\nweb1\nweb2\n\n[databases]\ndb1\n```",
     "answer": "cat << 'EOF' > inventory.ini\n[webservers]\nweb1\nweb2\n\n[databases]\ndb1\nEOF",
     "answerSteps": [
       "cat << 'EOF' > inventory.ini\n[webservers]\nweb1\nweb2\n\n[databases]\ndb1\nEOF"
@@ -4983,7 +4983,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Testar conectividade na frota com -m ping",
     "description": "O módulo `ping` do Ansible não envia ICMP de rede: ele valida conexão SSH, autenticação e disponibilidade do Python nos hosts do inventário, retornando `pong`.\nTeste todos os servidores (`all`) usando `inventory.ini`.",
-    "hint": "Execute `ansible all -i inventory.ini -m ping`",
+    "hint": "**Anatomia do comando Ansible ad-hoc:**\n• `all`: alvo (todos os hosts do inventário; poderia ser um grupo como `webservers`).\n• `-i inventory.ini`: informa qual arquivo de **inventário** usar.\n• `-m ping`: qual **módulo** executar.\nExecute `ansible all -i inventory.ini -m ping`",
     "answer": "ansible all -i inventory.ini -m ping",
     "answerSteps": [
       "ansible all -i inventory.ini -m ping"
@@ -5001,7 +5001,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Rodar comandos ad-hoc em grupo de servidores (-m shell)",
     "description": "Para checagens rápidas sem precisar abrir SSH servidor por servidor, o modo *ad-hoc* executa um comando em todo um grupo de uma vez.\nVerifique `uptime && df -h` somente no grupo `webservers` (`web1` e `web2`).",
-    "hint": "Execute `ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\"`",
+    "hint": "**Novidade aqui (`-a` = argumentos):**\n• Alvo `webservers` filtra só `web1` e `web2` (sem tocar no `db1`).\n• `-m shell` permite operadores Bash como `&&`, `|`, `>`.\n• `-a \"...\"` passa o comando remoto entre aspas.\nExecute `ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\"`",
     "answer": "ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\"",
     "answerSteps": [
       "ansible webservers -i inventory.ini -m shell -a \"uptime && df -h\""
@@ -5020,7 +5020,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Coletar metadados do sistema (Facts) com -m setup",
     "description": "Antes de aplicar regras, o Ansible coleta automaticamente informações do sistema operacional, IP e memória de cada host (chamadas de **Facts**).\nInspecione os fatos do servidor `db1` usando o módulo `setup`.",
-    "hint": "Execute `ansible db1 -i inventory.ini -m setup`",
+    "hint": "Aponte o alvo diretamente para o host `db1`, informe `-i inventory.ini` e use o módulo `-m setup`.\nExecute `ansible db1 -i inventory.ini -m setup`",
     "answer": "ansible db1 -i inventory.ini -m setup",
     "answerSteps": [
       "ansible db1 -i inventory.ini -m setup"
@@ -5037,7 +5037,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Distribuir arquivo e permissão para os servidores (-m copy)",
     "description": "O arquivo local `index.html` precisa ir para `/var/www/html/index.html` com permissão `0644` em todos os `webservers`. Como escreve em `/var/`, use `--become` (`-b`) para elevar privilégio.\nEnvie o arquivo com `-m copy`.",
-    "hint": "Execute `ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\"`",
+    "hint": "**Parâmetros do módulo `copy` (dentro de `-a`):**\n• `-b` (`--become`): equivale ao `sudo` remoto.\n• `src=`: arquivo local na sua máquina; `dest=`: destino no servidor; `mode=0644`: permissão final.\nExecute `ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\"`",
     "answer": "ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\"",
     "answerSteps": [
       "ansible webservers -i inventory.ini -b -m copy -a \"src=index.html dest=/var/www/html/index.html mode=0644\""
@@ -5055,7 +5055,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Instalar pacote (-m apt) e iniciar serviço (-m service) com -b",
     "description": "Em vez de enviar `apt install` via shell bruto, módulos declarativos garantem o estado final desejado sem erro se já estiver instalado.\nEm `webservers`, instale `nginx` (`state=present`) e inicie/habilite o serviço (`state=started enabled=yes`) usando `-b`.",
-    "hint": "Execute `ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\" && ansible webservers -i inventory.ini -b -m service -a \"name=nginx state=started enabled=yes\"`",
+    "hint": "**Divida em 2 módulos com `-b` (`sudo` remoto):**\n1. Instalar pacote via `-m apt -a \"name=nginx state=present\"` (`present` = garantir que está instalado).\n2. Subir e habilitar no boot via `-m service -a \"name=nginx state=started enabled=yes\"`.\nLigue os dois com `&&` ou rode um de cada vez!",
     "answer": "ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\" && ansible webservers -i inventory.ini -b -m service -a \"name=nginx state=started enabled=yes\"",
     "answerSteps": [
       "ansible webservers -i inventory.ini -b -m apt -a \"name=nginx state=present\"",
@@ -5075,7 +5075,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Escrever e executar seu primeiro Playbook YAML (webserver.yml)",
     "description": "Comandos ad-hoc são pontuais; **Playbooks YAML** transformam infraestrutura em código reutilizável e versionado no Git.\nCrie `webserver.yml` declarando `hosts: webservers`, `become: yes` e duas `tasks` (`apt` para `nginx` e `service` para iniciar/habilitar `nginx`), e rode com `ansible-playbook`.",
-    "hint": "Crie `webserver.yml` (via `cat << 'EOF'` ou `nano webserver.yml`) e execute `ansible-playbook -i inventory.ini webserver.yml`.",
+    "hint": "**Regra de ouro do YAML:** use **apenas espaços (2 espaços por nível)**, nunca `Tab`!\nCrie `webserver.yml` (via `nano` ou `cat << 'EOF'`) e rode com `ansible-playbook -i inventory.ini webserver.yml`:\n```yaml\n- name: Configurar servidores web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Iniciar nginx\n      service: name=nginx state=started enabled=yes\n```",
     "answer": "cat << 'EOF' > webserver.yml\n- name: Configurar servidores web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Iniciar nginx\n      service: name=nginx state=started enabled=yes\nEOF\nansible-playbook -i inventory.ini webserver.yml",
     "answerSteps": [
       "cat << 'EOF' > webserver.yml\n- name: Configurar servidores web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Iniciar nginx\n      service: name=nginx state=started enabled=yes\nEOF",
@@ -5095,7 +5095,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Comprovar Idempotência na prática (changed=0)",
     "description": "Em Bash, rodar um script duas vezes pode duplicar linhas ou falhar. No Ansible, **idempotência** garante que se o servidor já está no estado desejado (`webserver.yml` já aplicado), rodar de novo resulta em `changed=0` e tudo `ok`.\nExecute `webserver.yml` novamente e confira o `PLAY RECAP`!",
-    "hint": "Execute `ansible-playbook -i inventory.ini webserver.yml`",
+    "hint": "Como o `webserver.yml` já instalou e iniciou o Nginx na etapa anterior, basta rodar de novo para ver **`changed=0`**:\n`ansible-playbook -i inventory.ini webserver.yml`",
     "answer": "ansible-playbook -i inventory.ini webserver.yml",
     "answerSteps": [
       "ansible-playbook -i inventory.ini webserver.yml"
@@ -5113,7 +5113,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Simular alterações em segurança com --check --diff",
     "description": "Antes de aplicar `deploy.yml` em produção, faça um ensaio (*dry-run*) para ver exatamente quais linhas mudariam sem alterar nenhum servidor.\nExecute `ansible-playbook` com `--check` e `--diff`.",
-    "hint": "Execute `ansible-playbook -i inventory.ini deploy.yml --check --diff`",
+    "hint": "**Combinando flags de segurança:**\n• `--check`: modo simulação (*dry-run*), não muda nada nos servidores.\n• `--diff`: mostra em verde/vermelho exatamente o que mudaria nos arquivos.\nExecute `ansible-playbook -i inventory.ini deploy.yml --check --diff` (dica: `-CD` também funciona!).",
     "answer": "ansible-playbook -i inventory.ini deploy.yml --check --diff",
     "answerSteps": [
       "ansible-playbook -i inventory.ini deploy.yml --check --diff"
@@ -5131,7 +5131,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Variáveis YAML (vars) e edição segura com lineinfile",
     "description": "Usar `echo ... >> /etc/app.conf` em Bash duplica linhas toda vez que roda. O módulo `lineinfile` insere a linha somente se ainda não existir, usando variáveis como `{{ app_env }}`.\nInspecione `cat vars_app.yml` e execute o playbook nos servidores.",
-    "hint": "Execute `ansible-playbook -i inventory.ini vars_app.yml`",
+    "hint": "Leia primeiro com `cat vars_app.yml` para ver como o bloco `vars:` define `app_env` e como `{{ app_env }}` injeta esse valor.\nDepois execute `ansible-playbook -i inventory.ini vars_app.yml`",
     "answer": "ansible-playbook -i inventory.ini vars_app.yml",
     "answerSteps": [
       "cat vars_app.yml",
@@ -5150,7 +5150,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Reiniciar serviço somente se houver mudança (notify/handlers)",
     "description": "Reiniciar o Nginx à toa derruba conexões abertas! O bloco `handlers:` só executa quando uma tarefa com `notify:` realmente muda algo (`changed=true`).\nInspecione `nginx_config.yml` e execute o playbook para disparar o handler `Restart nginx`.",
-    "hint": "Execute `ansible-playbook -i inventory.ini nginx_config.yml`",
+    "hint": "Veja o conteúdo com `cat nginx_config.yml`: observe que a tarefa chama `notify: Restart nginx`, e a seção `handlers:` lá embaixo recebe esse aviso apenas se houver alteração real.\nDepois execute `ansible-playbook -i inventory.ini nginx_config.yml`",
     "answer": "ansible-playbook -i inventory.ini nginx_config.yml",
     "answerSteps": [
       "cat nginx_config.yml",
@@ -5169,7 +5169,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Evitar repetição com loop e filtrar hosts com when",
     "description": "O arquivo `loop_when.yml` instala `curl`, `htop` e `jq` via `loop:` em toda a frota, mas libera a porta 80 no `ufw` **apenas** `when: inventory_hostname in groups['webservers']` (pulando `db1` como `skipping`).\nExecute o playbook para observar esse comportamento!",
-    "hint": "Execute `ansible-playbook -i inventory.ini loop_when.yml`",
+    "hint": "Leia primeiro `cat loop_when.yml` para enxergar `{{ item }}` junto de `loop:` e a condição `when:`.\nDepois rode `ansible-playbook -i inventory.ini loop_when.yml` e note `skipping: [db1]` no firewall!",
     "answer": "ansible-playbook -i inventory.ini loop_when.yml",
     "answerSteps": [
       "cat loop_when.yml",
@@ -5189,7 +5189,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🏆 Projeto Final Ansible: Stack Multi-Host Idempotente",
     "description": "O playbook `infra.yml` provisiona toda a arquitetura (`web1`, `web2` e `db1`): usuário `deploy`, pacotes base, Nginx, config com handler, página HTML e firewall.\nExecute `infra.yml` **duas vezes**: na 1ª aplica toda a infraestrutura (`changed > 0`), e na 2ª comprova idempotência total (`changed=0` e `failed=0`)!",
-    "hint": "Execute `ansible-playbook -i inventory.ini infra.yml && ansible-playbook -i inventory.ini infra.yml`",
+    "hint": "Rode `ansible-playbook -i inventory.ini infra.yml` uma vez para aplicar e observe os `changed`; em seguida rode exatamente o mesmo comando uma 2ª vez e comprove `changed=0` no `PLAY RECAP`!",
     "answer": "ansible-playbook -i inventory.ini infra.yml && ansible-playbook -i inventory.ini infra.yml",
     "answerSteps": [
       "ansible-playbook -i inventory.ini infra.yml",
@@ -5209,7 +5209,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🚨 Incidente #1: Alerta 404 no Nginx",
     "description": "O monitoramento reportou um erro 404 suspeito no servidor web. Investigue o log /var/log/nginx/access.log para encontrar a requisição 404 e confirme em seguida quais portas TCP estão em escuta no servidor.",
-    "hint": "Filtre o erro 404 com grep 404 /var/log/nginx/access.log e liste as portas com ss -tulpn",
+    "hint": "**Raciocínio de investigação em 2 passos:**\n1. Filtre a falha HTTP no log com `grep 404 /var/log/nginx/access.log`.\n2. Confira as portas abertas/serviços em escuta com `ss -tulpn` (`t`=TCP, `u`=UDP, `l`=listening, `p`=processo, `n`=portas numéricas).",
     "answer": "grep 404 /var/log/nginx/access.log && ss -tulpn",
     "answerSteps": [
       "grep 404 /var/log/nginx/access.log",
@@ -5229,7 +5229,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🚨 Incidente #2: Banco PostgreSQL fora do ar",
     "description": "A aplicação está sem banco! Verifique se o serviço postgresql está ativo, inicie-o imediatamente e habilite-o para subir automaticamente no boot.",
-    "hint": "Rode systemctl is-active postgresql (ou status), depois sudo systemctl start postgresql e sudo systemctl enable postgresql",
+    "hint": "**Diagnóstico → Ação → Persistência:**\n1. Confira o estado com `systemctl status postgresql` (ou `is-active`).\n2. Suba agora com `sudo systemctl start postgresql`.\n3. Garanta que volte sozinho após reiniciar a máquina com `sudo systemctl enable postgresql` (ou use `sudo systemctl enable --now postgresql` direto!).",
     "answer": "sudo systemctl start postgresql && sudo systemctl enable postgresql",
     "answerSteps": [
       "systemctl status postgresql",
@@ -5249,7 +5249,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🚨 Incidente #3: Segredo .env prestes a ser commitado!",
     "description": "Alguém deu git add no arquivo de senhas \".env\" junto com \"app.js\"! Tire o \".env\" da área de stage sem apagar o arquivo e faça o commit apenas de \"app.js\".",
-    "hint": "Use git restore --staged .env e depois git commit -m \"deploy app\"",
+    "hint": "**Nunca use `rm` aqui — você quer só tirar do *staging*!**\n1. Inspecione com `git status`.\n2. Desfaça o `git add` apenas do `.env`: `git restore --staged .env` (ou `git reset HEAD .env`).\n3. Agora commite com segurança só o `app.js`: `git commit -m \"deploy app\"`",
     "answer": "git restore --staged .env && git commit -m \"deploy app\"",
     "answerSteps": [
       "git status",
@@ -5268,7 +5268,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🚨 Incidente #4: Contêiner travado impedindo limpeza",
     "description": "Você precisa remover a imagem \"nginx\", mas o contêiner \"travado\" está ativo usando essa imagem. Pare o contêiner, remova-o e só então remova a imagem nginx.",
-    "hint": "Execute docker stop travado, depois docker rm travado e por fim docker rmi nginx",
+    "hint": "**Ordem obrigatória no Docker (de cima para baixo):**\n1. Parar o contêiner em execução: `docker stop travado`\n2. Remover o contêiner parado: `docker rm travado` (ou `docker rm -f travado`)\n3. Só agora o Docker libera remover a imagem base: `docker rmi nginx`",
     "answer": "docker stop travado && docker rm travado && docker rmi nginx",
     "answerSteps": [
       "docker stop travado",
@@ -5287,7 +5287,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🚨 Incidente #5: Pipeline completo de backup (SQL + Gzip + Hash)",
     "description": "Exporte em CSV os nomes dos membros de 'Tokyo' do gym.db para \"tokyo.csv\", comprima o arquivo mantendo o original (-k) e calcule o hash SHA-256 de \"tokyo.csv.gz\".",
-    "hint": "Execute sqlite3 -csv gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\" > tokyo.csv, depois gzip -k tokyo.csv e por fim sha256sum tokyo.csv.gz",
+    "hint": "**Pipeline em 3 etapas encadeadas:**\n1. Exportar do banco salvando com `>`: `sqlite3 -csv gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\" > tokyo.csv`\n2. Comprimir mantendo o `.csv` original (`-k` = *keep*): `gzip -k tokyo.csv`\n3. Gerar assinatura de integridade: `sha256sum tokyo.csv.gz`",
     "answer": "sqlite3 -csv gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\" > tokyo.csv && gzip -k tokyo.csv && sha256sum tokyo.csv.gz",
     "answerSteps": [
       "sqlite3 -csv gym.db \"SELECT name FROM members WHERE city = 'Tokyo';\" > tokyo.csv",
@@ -5308,7 +5308,7 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "🚨 Incidente #6: Script de deploy sem permissão de execução",
     "description": "Um colega deixou o script \"/home/user/deploy.sh\" pronto, mas a execução direta falha com \"Permissão negada\". Adicione permissão de execução (+x) e rode ./deploy.sh.",
-    "hint": "Execute chmod +x deploy.sh && ./deploy.sh",
+    "hint": "**Como diagnosticar e corrigir em produção:**\n1. Confira `ls -l deploy.sh`: vai faltar o `x` nas permissões (`rw-r--r--`).\n2. Libere execução com `chmod +x deploy.sh` e rode com `./deploy.sh`.",
     "answer": "chmod +x deploy.sh && ./deploy.sh",
     "answerSteps": [
       "chmod +x deploy.sh",

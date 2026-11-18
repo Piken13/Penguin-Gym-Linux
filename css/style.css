@@ -617,7 +617,10 @@ body {
   border-radius: var(--radius-md);
   padding: 0.6rem 0.85rem;
   font-size: 0.82rem;
+  line-height: 1.55;
   color: #fef08a;
+  max-height: 245px;
+  overflow-y: auto;
 }
 
 .answer-content {
@@ -625,6 +628,88 @@ body {
   border: 1px solid rgba(var(--brand-green-rgb), 0.25);
   border-radius: var(--radius-md);
   padding: 0.55rem 0.85rem;
+  max-height: 245px;
+  overflow-y: auto;
+}
+
+.inline-code-block {
+  margin: 0.4rem 0 0.25rem;
+  padding: 0.5rem 0.7rem;
+  background-color: #0b0e14;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #bfdbfe;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.inline-code-block code {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+.answer-steps-wrap {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(var(--brand-green-rgb), 0.28);
+}
+
+.answer-steps-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.answer-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.answer-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background-color: rgba(11, 14, 20, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+}
+
+.answer-step-num {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--brand-green);
+  background-color: rgba(var(--brand-green-rgb), 0.14);
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  margin-top: 0.08rem;
+}
+
+.answer-step-code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: #d1fae5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.answer-step-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .answer-code-row {
