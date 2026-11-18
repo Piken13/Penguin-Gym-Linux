@@ -2274,6 +2274,111 @@ const MAN_PAGES = {
       "ansible-playbook -i inventory.ini webserver.yml",
       "ansible-playbook -i inventory.ini deploy.yml --check --diff"
     ]
+  },
+  "for": {
+    "section": "1",
+    "short": "estrutura de repetição sobre uma lista de itens no shell Bash",
+    "synopsis": "for VAR in LISTA; do COMANDOS; done",
+    "description": "Itera sobre cada elemento em LISTA atribuindo o valor à variável VAR e executando o bloco do...done em cada passo.",
+    "options": [
+      "in LISTA      Define os valores ou globs (*.pdf, {1..5}) da iteração",
+      "do ... done   Delimita o bloco de comandos executado por item"
+    ],
+    "examples": [
+      "for i in 1 2 3; do echo \"Item $i\"; done",
+      "for f in downloads/*.pdf; do mv \"$f\" downloads/documentos/; done"
+    ]
+  },
+  "if": {
+    "section": "1",
+    "short": "execução condicional de blocos no shell Bash",
+    "synopsis": "if CONDIÇÃO; then COMANDOS; [elif ...; then ...] [else ...;] fi",
+    "description": "Avalia o código de saída (exit code) de CONDIÇÃO; executa o bloco then quando o retorno for 0, ou prossegue para elif/else.",
+    "options": [
+      "[ ... ] / [[ ... ]]  Comandos de teste de arquivos, strings e números",
+      "! CONDIÇÃO           Inverte o status lógico da condição"
+    ],
+    "examples": [
+      "if [ -f script.sh ]; then echo \"Existe\"; fi",
+      "if ! systemctl is-active --quiet nginx; then sudo systemctl start nginx; fi"
+    ]
+  },
+  "while": {
+    "section": "1",
+    "short": "laço condicional enquanto a condição retornar sucesso (exit 0)",
+    "synopsis": "while CONDIÇÃO; do COMANDOS; done",
+    "description": "Repete a execução do bloco do...done enquanto o comando de condição retornar código de saída 0.",
+    "options": [
+      "break         Interrompe o laço imediatamente",
+      "continue      Avança para a próxima iteração"
+    ],
+    "examples": [
+      "while read -r linha; do echo \"$linha\"; done < arquivo.txt"
+    ]
+  },
+  "until": {
+    "section": "1",
+    "short": "laço condicional até que a condição passe a retornar sucesso (exit 0)",
+    "synopsis": "until CONDIÇÃO; do COMANDOS; done",
+    "description": "Semelhante ao while, porém executa o bloco repetidamente enquanto a condição falhar (exit code != 0).",
+    "options": [],
+    "examples": [
+      "until nc -z localhost 80; do sleep 1; done"
+    ]
+  },
+  "let": {
+    "section": "1",
+    "short": "avalia expressões aritméticas inteiras no shell Bash",
+    "synopsis": "let EXPRESSÃO [EXPRESSÃO ...]",
+    "description": "Executa operações aritméticas com variáveis do shell. Alternativa moderna: $(( EXPRESSÃO )).",
+    "options": [],
+    "examples": [
+      "let \"CONT=CONT+1\"",
+      "echo $(( 10 + 5 ))"
+    ]
+  },
+  "getent": {
+    "section": "1",
+    "short": "consulta entradas de bancos administrativos do sistema (NSS)",
+    "synopsis": "getent BANCO [CHAVE]",
+    "description": "Obtém registros de bancos configurados em /etc/nsswitch.conf como passwd, group e hosts.",
+    "options": [
+      "passwd        Lista usuários cadastrados no sistema",
+      "group         Lista grupos cadastrados",
+      "hosts         Resolve nomes e IPs locais"
+    ],
+    "examples": [
+      "getent passwd user",
+      "getent hosts localhost"
+    ]
+  },
+  "lsof": {
+    "section": "8",
+    "short": "lista arquivos abertos e sockets de rede usados por processos",
+    "synopsis": "lsof [-i :PORTA] [-u USUARIO] [ARQUIVO]",
+    "description": "Exibe descritores de arquivos abertos, bibliotecas carregadas e portas TCP/UDP escutadas por cada PID.",
+    "options": [
+      "-i :80        Filtra processos usando a porta especificada",
+      "-u user       Lista arquivos abertos por um usuário",
+      "-nP           Evita resolução de DNS e nomes de serviço"
+    ],
+    "examples": [
+      "sudo lsof -i :80",
+      "lsof /var/log/syslog"
+    ]
+  },
+  "at": {
+    "section": "1",
+    "short": "agenda comandos para execução única em horário futuro",
+    "synopsis": "at HORÁRIO",
+    "description": "Lê comandos da entrada padrão para executá-los uma única vez no momento especificado (complementar ao cron, que é recorrente).",
+    "options": [
+      "atq           Lista tarefas agendadas na fila",
+      "atrm ID       Remove uma tarefa pendente da fila"
+    ],
+    "examples": [
+      "echo \"/home/user/backup.sh\" | at 03:00"
+    ]
   }
 };
 

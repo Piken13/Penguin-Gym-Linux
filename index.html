@@ -37,7 +37,7 @@
     </div>
 
     <div class="header-actions">
-      <button type="button" class="btn-secondary active-toggle" id="btnToggleGuiPanel" title="Mostrar ou ocultar o Inspetor Gráfico (Arquivos, Git, Docker, SQL)">
+      <button type="button" class="btn-secondary active-toggle" id="btnToggleGuiPanel" title="Mostrar ou ocultar o Inspetor Gráfico (Arquivos, Git, Docker, Ansible, SQL)">
         🖥️ Painel Gráfico
       </button>
       <button type="button" class="btn-secondary" id="btnResetProgress" title="Apagar progresso e recomeçar do zero">
@@ -50,25 +50,31 @@
   <main class="app-main">
 
     <!-- Left Sidebar: Categories, Search, and Lessons List -->
-    <aside class="app-sidebar" aria-label="Navegação de Lições">
-      <div class="sidebar-search">
-        <input type="search" id="lessonSearchInput" class="search-input" placeholder="🔍 Buscar lição ou comando (ex: grep, git)...">
-      </div>
+    <aside class="app-sidebar" id="appSidebar" aria-label="Navegação de Lições">
+      <button type="button" class="mobile-sidebar-toggle" id="btnMobileSidebarToggle" aria-expanded="false">
+        <span id="mobileSidebarSummary">📚 Trilhas &amp; Lições</span>
+        <span class="mobile-sidebar-chevron" id="mobileSidebarChevron">▾</span>
+      </button>
+      <div class="sidebar-collapsible" id="sidebarCollapsible">
+        <div class="sidebar-search">
+          <input type="search" id="lessonSearchInput" class="search-input" placeholder="🔍 Buscar lição ou comando (ex: grep, git)...">
+        </div>
 
-      <!-- Category Pills Grid -->
-      <div class="category-pills" id="categoryPills" role="tablist">
-        <!-- Gerado dinamicamente pelo JS -->
-      </div>
+        <!-- Category Pills Grid -->
+        <div class="category-pills" id="categoryPills" role="tablist">
+          <!-- Gerado dinamicamente pelo JS -->
+        </div>
 
-      <!-- Current Category Header -->
-      <div class="category-list-header">
-        <span id="currentCategoryTitle">🌱 Iniciante</span>
-        <span id="currentCategoryCount" class="category-count-badge">0/18</span>
-      </div>
+        <!-- Current Category Header -->
+        <div class="category-list-header">
+          <span id="currentCategoryTitle">🌱 Iniciante</span>
+          <span id="currentCategoryCount" class="category-count-badge">0/18</span>
+        </div>
 
-      <!-- Scrollable Lesson List -->
-      <div class="lesson-list-scroll" id="lessonListContainer" role="region">
-        <!-- Gerado dinamicamente pelo JS -->
+        <!-- Scrollable Lesson List -->
+        <div class="lesson-list-scroll" id="lessonListContainer" role="region">
+          <!-- Gerado dinamicamente pelo JS -->
+        </div>
       </div>
     </aside>
 
@@ -146,7 +152,7 @@
               <div class="terminal-tools">
                 <button type="button" class="terminal-tool-btn" id="btnTerminalHelp" title="Exibir comandos disponíveis">❓ Ajuda</button>
                 <button type="button" class="terminal-tool-btn" id="btnTerminalClear" title="Limpar terminal (clear)">🧹 Limpar</button>
-                <button type="button" class="terminal-tool-btn" id="btnResetFS" title="Limpar arquivos acumulados e restaurar o ponto inicial da lição">🧹 Restaurar Ponto Inicial</button>
+                <button type="button" class="terminal-tool-btn terminal-tool-reset" id="btnResetFS" title="Limpar arquivos acumulados e restaurar o ponto inicial da lição">🔄 Resetar</button>
               </div>
             </div>
 
@@ -160,10 +166,10 @@
               <!-- Command Input Line -->
               <div class="terminal-input-line">
                 <span class="terminal-prompt" id="terminalPrompt">user@gym:~$ </span>
-                <input type="text" class="terminal-input" id="terminalInput"
+                <textarea rows="1" class="terminal-input" id="terminalInput"
                        placeholder="Digite um comando Linux aqui e pressione Enter..."
                        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-                       aria-label="Entrada de comando Linux" autofocus>
+                       aria-label="Entrada de comando Linux" autofocus></textarea>
               </div>
 
               <!-- Autocomplete Chips for mobile & quick select -->
@@ -198,14 +204,17 @@
                 <button type="button" class="gui-icon-btn" id="btnGuiUpDir" title="Ir para diretório pai (cd ..)">⬆️ Pai</button>
                 <button type="button" class="gui-icon-btn" id="btnGuiHomeDir" title="Ir para pasta Home (cd ~)">🏠 Home</button>
                 <button type="button" class="gui-icon-btn" id="btnGuiListDir" title="Executar ls -la no terminal">📋 ls -la</button>
-                <button type="button" class="gui-icon-btn btn-gui-reset" id="btnGuiResetFiles" title="Restaurar ponto inicial limpo">🧹 Reset</button>
               </div>
             </div>
 
             <div class="gui-quick-create">
               <button type="button" class="gui-action-chip" id="btnGuiNewFolder">📁 + Pasta</button>
               <button type="button" class="gui-action-chip" id="btnGuiNewFile">📄 + Arquivo</button>
-              <button type="button" class="gui-action-chip gui-action-reset" id="btnGuiResetEnv" title="Limpar todos os arquivos acumulados e restaurar o ponto inicial">🧹 Restaurar Ponto Inicial</button>
+            </div>
+            <div class="gui-inline-prompt d-none" id="guiCreatePrompt">
+              <input type="text" id="guiCreateInput" class="gui-inline-input" autocomplete="off" spellcheck="false" placeholder="Nome...">
+              <button type="button" class="btn-mini btn-mini-primary" id="btnGuiCreateConfirm">Criar</button>
+              <button type="button" class="btn-mini" id="btnGuiCreateCancel" title="Cancelar">✕</button>
             </div>
             <div class="gui-options-bar">
               <label class="gui-clean-toggle" title="Quando ativado, limpa automaticamente arquivos acumulados de missões anteriores ao mudar de lição">

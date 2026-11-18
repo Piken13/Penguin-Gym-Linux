@@ -48,7 +48,7 @@ class LessonChecker {
             i++;
             continue;
           }
-          if (ch === ';') {
+          if (ch === ';' || ch === '\n') {
             if (curr.trim()) parts.push(curr.trim());
             curr = '';
             continue;
@@ -142,27 +142,45 @@ class LessonChecker {
 
   static check(lesson, cmdLine, output, fs, ctx) {
     if (!lesson || !cmdLine) return false;
-    if (ctx && ctx.res && ctx.res.type === 'error' && lesson.id !== 'bash-history-exec' && lesson.id !== 'bash-or-fallback') return false;
+    if (ctx && ctx.res && ctx.res.type === 'error' && lesson.id !== 'bash-or-fallback') return false;
     const raw = cmdLine.trim();
     const sessionHistory = (ctx && ctx.sessionHistory) ? ctx.sessionHistory : [raw];
     const allSessionText = sessionHistory.join(' ; ');
 
+    const { git, docker, sql, commandEngine } = ctx || {};
+    const ansible = (ctx && ctx.ansible) || (commandEngine && commandEngine.ansible);
+    const id = lesson.id;
+    const expandAliasSeg = (s) => (
+      commandEngine && typeof commandEngine.expandAliases === 'function' &&
+      id !== 'bash-alias-create' && id !== 'bash-alias-remove'
+        ? commandEngine.expandAliases(s)
+        : s
+    );
+
     const subCommands = LessonChecker.splitTopLevel(raw, 'seq');
     const lastSub = subCommands[subCommands.length - 1] || raw;
     const lastPipes = LessonChecker.splitTopLevel(lastSub, 'pipe');
-    const lastStage = lastPipes[lastPipes.length - 1] || lastSub;
+    const lastStage = expandAliasSeg(lastPipes[lastPipes.length - 1] || lastSub);
 
     const parsed = LessonChecker.parseCall(lastStage);
     const { cmd, args, effCmd, effArgs } = parsed;
-    const pipelineCalls = lastPipes.map(p => LessonChecker.parseCall(p));
+    const pipelineCalls = lastPipes.map(p => LessonChecker.parseCall(expandAliasSeg(p)));
     const allCalls = [];
     for (const sub of subCommands) {
       for (const p of LessonChecker.splitTopLevel(sub, 'pipe')) {
-        allCalls.push(LessonChecker.parseCall(p));
+        allCalls.push(LessonChecker.parseCall(expandAliasSeg(p)));
       }
     }
     const hasCall = (calls, name) => calls.some(c => c.effCmd === name || c.cmd === name);
-    const id = lesson.id;
+    const hasLineCountFlag = (argList, expected) => {
+      const target = String(expected);
+      for (let i = 0; i < argList.length; i++) {
+        const a = argList[i];
+        if ((a === '-n' || a === '--lines') && argList[i + 1] === target) return true;
+        if (a === `--lines=${target}` || a === `-n${target}` || a === `-${target}`) return true;
+      }
+      return false;
+    };
 
     // Se o usuário está consultando documentação (man, whatis, apropos, help),
     // isso só deve ser avaliado como conclusão se a lição for especificamente sobre essa ferramenta.
@@ -171,9 +189,6 @@ class LessonChecker {
     if (isDocLookup && !isDocLesson) {
       return false;
     }
-
-    const { git, docker, sql, commandEngine } = ctx || {};
-    const ansible = (ctx && ctx.ansible) || (commandEngine && commandEngine.ansible);
 
     switch (id) {
       // ==========================================
@@ -186,16 +201,23 @@ class LessonChecker {
         return effCmd === 'ls' &&
                !LessonChecker.hasShortFlag(effArgs, 'a', '--all') &&
                output.includes('documents') && output.includes('projects') &&
-               effArgs.filter(a => !a.startsWith('-')).every(a => a === '.' || a === '~' || a === '/home/user');
+               effArgs.filter(a => !a.startsWith('-')).every(a => {
+                 const clean = a.length > 1 ? a.replace(/\/+$/, '') : a;
+                 return clean === '.' || clean === '~' || clean === '/home/user';
+               });
 
       case 'basic-ls-all':
-        return effCmd === 'ls' && LessonChecker.hasShortFlag(effArgs, 'a', '--all');
+        return effCmd === 'ls' &&
+               LessonChecker.hasShortFlag(effArgs, 'a', '--all') &&
+               !LessonChecker.hasShortFlag(effArgs, 'l', '--long');
 
       case 'basic-cd-home':
         return effCmd === 'cd' && fs.currentPath === '/home/user';
 
       case 'basic-cd-parent':
-        return effCmd === 'cd' && effArgs[0] === '..' && fs.currentPath === '/home/user' &&
+        return (effCmd === 'cd' && effArgs[0] && effArgs[0].replace(/\/+$/, '') === '..' ||
+                allCalls.some(c => c.effCmd === 'cd' && c.effArgs[0] && c.effArgs[0].replace(/\/+$/, '') === '..')) &&
+               fs.currentPath === '/home/user' &&
                ((fs.oldPath && fs.oldPath.startsWith('/home/user/')) ||
                 allSessionText.includes('cd documents') ||
                 allSessionText.includes('cd projects'));
@@ -216,10 +238,10 @@ class LessonChecker {
         return effCmd === 'help' && (output.includes('Comandos') || output.includes('Disponíveis'));
 
       case 'system-which':
-        return effCmd === 'which' && effArgs[0] === 'ls' && output.includes('/ls');
+        return effCmd === 'which' && effArgs.filter(a => !a.startsWith('-')).includes('ls') && output.includes('/ls');
 
       case 'system-which-grep':
-        return effCmd === 'which' && effArgs[0] === 'grep' && output.includes('/grep');
+        return effCmd === 'which' && effArgs.filter(a => !a.startsWith('-')).includes('grep') && output.includes('/grep');
 
       case 'advanced-ls-size-format':
         return effCmd === 'ls' &&
@@ -286,10 +308,13 @@ class LessonChecker {
         return effCmd === 'man' && effArgs.includes('grep') && output.includes('GREP(1)');
 
       case 'tool-whatis':
-        return effCmd === 'whatis' && effArgs.includes('tar') && output.includes('tar (1)');
+        return ((effCmd === 'whatis' || (effCmd === 'man' && LessonChecker.hasShortFlag(effArgs, 'f'))) &&
+                effArgs.filter(a => !a.startsWith('-')).includes('tar') &&
+                output.includes('tar (1)'));
 
       case 'tool-apropos':
-        return effCmd === 'apropos' && output.includes('(');
+        return ((effCmd === 'apropos' || (effCmd === 'man' && LessonChecker.hasShortFlag(effArgs, 'k'))) &&
+                output.includes('('));
 
       case 'tool-neofetch':
         return effCmd === 'neofetch' && output.includes('Debian');
@@ -358,7 +383,7 @@ class LessonChecker {
       }
 
       case 'permission-sudo-basic':
-        return cmd === 'sudo' && raw.includes('/root') && output.includes('root_secret.txt');
+        return (cmd === 'sudo' || fs.sudoMode) && hasCall(allCalls, 'ls') && raw.includes('/root') && output.includes('root_secret.txt');
 
       case 'permission-sudo-mkdir': {
         const myfolder = fs.getNode('/opt/myfolder');
@@ -376,8 +401,12 @@ class LessonChecker {
       case 'advanced-cat-line-numbers':
         return effCmd === 'cat' && LessonChecker.hasShortFlag(effArgs, 'n', '--number') && raw.includes('notes.txt') && output.length > 0;
 
-      case 'advanced-cp-verbose':
-        return effCmd === 'cp' && LessonChecker.hasShortFlag(effArgs, 'v', '--verbose') && fs.getNode('/home/user/backup.txt') !== null;
+      case 'advanced-cp-verbose': {
+        const backup = fs.getNode('/home/user/backup.txt');
+        const orig = fs.getNode('/home/user/documents/readme.txt');
+        return effCmd === 'cp' && LessonChecker.hasShortFlag(effArgs, 'v', '--verbose') &&
+               !!backup && backup.type === 'file' && (!orig || backup.content === orig.content);
+      }
 
       case 'text-cut-fields':
         return hasCall(allCalls, 'cut') && raw.includes('-d') && raw.includes('-f') && raw.includes('notes.txt') && output.length > 0;
@@ -386,10 +415,10 @@ class LessonChecker {
         return hasCall(allCalls, 'tr') && (raw.includes('<') || raw.includes('|')) && output.includes('PENGUIN GYM LINUX');
 
       case 'text-head-lines':
-        return effCmd === 'head' && (effArgs.includes('-n') || effArgs.some(a => /^-n?\d+$/.test(a))) && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'head' && hasLineCountFlag(effArgs, 2) && raw.includes('notes.txt') && output.split('\n').filter(Boolean).length === 2;
 
       case 'text-tail-lines':
-        return effCmd === 'tail' && (effArgs.includes('-n') || effArgs.some(a => /^-n?\d+$/.test(a))) && raw.includes('notes.txt') && output.length > 0;
+        return effCmd === 'tail' && hasLineCountFlag(effArgs, 2) && raw.includes('notes.txt') && output.split('\n').filter(Boolean).length === 2;
 
       case 'text-sort-reverse':
         return effCmd === 'sort' && LessonChecker.hasShortFlag(effArgs, 'r', '--reverse') && raw.includes('data.txt') && output.length > 0;
@@ -415,7 +444,7 @@ class LessonChecker {
       // 3. SYSADMIN & SERVIÇOS (36 lições)
       // ==========================================
       case 'sys-sudo-root-session':
-        return (raw === 'sudo -i' || raw === 'sudo su' || raw === 'su -') && fs.sudoMode === true;
+        return (/^(sudo\s+(-i|-s|su(\s+-)?)|su(\s+-)?)$/.test(raw)) && fs.sudoMode === true;
 
       case 'sys-session-exit':
         return (effCmd === 'exit' || effCmd === 'logout') && (output.includes('exit') || output.includes('logout'));
@@ -423,8 +452,13 @@ class LessonChecker {
       case 'sys-systemctl-status':
         return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('status') && raw.includes('nginx') && output.includes('nginx.service');
 
-      case 'sys-systemctl-is-active':
-        return effCmd === 'systemctl' && effArgs[0] === 'is-active' && (effArgs[1] || '').replace(/\.service$/, '') === 'nginx' && output.trim() === 'active';
+      case 'sys-systemctl-is-active': {
+        const pos = effArgs.filter(a => !a.startsWith('-'));
+        const quietOk = effArgs.includes('--quiet') || effArgs.includes('-q');
+        return effCmd === 'systemctl' && pos[0] === 'is-active' &&
+               (pos[1] || '').replace(/\.service$/, '') === 'nginx' &&
+               (output.trim() === 'active' || (quietOk && (!ctx.res || ctx.res.code === 0)));
+      }
 
       case 'sys-systemctl-restart':
         return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('restart') && raw.includes('nginx') &&
@@ -438,13 +472,17 @@ class LessonChecker {
         return (effCmd === 'systemctl' || effCmd === 'service') && raw.includes('start') && raw.includes('postgresql') &&
                (commandEngine ? commandEngine.services.postgresql.active === true : true);
 
-      case 'sys-systemctl-enable':
-        return effCmd === 'systemctl' && effArgs[0] === 'enable' && (effArgs[1] || '').replace(/\.service$/, '') === 'nginx' &&
+      case 'sys-systemctl-enable': {
+        const pos = effArgs.filter(a => !a.startsWith('-'));
+        return effCmd === 'systemctl' && pos[0] === 'enable' && (pos[1] || '').replace(/\.service$/, '') === 'nginx' &&
                (commandEngine ? commandEngine.services.nginx.enabled === true : output.includes('multi-user.target.wants'));
+      }
 
-      case 'sys-systemctl-disable':
-        return effCmd === 'systemctl' && effArgs[0] === 'disable' && (effArgs[1] || '').replace(/\.service$/, '') === 'nginx' &&
+      case 'sys-systemctl-disable': {
+        const pos = effArgs.filter(a => !a.startsWith('-'));
+        return effCmd === 'systemctl' && pos[0] === 'disable' && (pos[1] || '').replace(/\.service$/, '') === 'nginx' &&
                (commandEngine ? commandEngine.services.nginx.enabled === false : output.includes('Removed'));
+      }
 
       case 'sys-journalctl-lines':
         return effCmd === 'journalctl' &&
@@ -485,7 +523,9 @@ class LessonChecker {
         return (effCmd === 'apt' || effCmd === 'apt-get') && effArgs.includes('autoremove') && output.includes('Lendo listas de pacotes');
 
       case 'sys-dpkg-list':
-        return effCmd === 'dpkg' && (effArgs.includes('-l') || effArgs.includes('--list')) && output.includes('ii  ');
+        return hasCall(allCalls, 'dpkg') &&
+               allCalls.some(c => c.effCmd === 'dpkg' && (c.effArgs.includes('-l') || c.effArgs.includes('--list'))) &&
+               output.includes('ii  ');
 
       case 'sys-free-human':
         return effCmd === 'free' && LessonChecker.hasShortFlag(effArgs, 'h', '--human') && output.includes('Mem.:');
@@ -500,7 +540,8 @@ class LessonChecker {
         return effCmd === 'id' && output.includes('uid=');
 
       case 'sys-useradd':
-        return effCmd === 'useradd' && effArgs.includes('devops') && (fs.getNode('/home/devops') !== null || fs.readFile('/etc/passwd').includes('devops:'));
+        return (effCmd === 'useradd' || effCmd === 'adduser') && effArgs.includes('devops') &&
+               fs.getNode('/home/devops') !== null && fs.readFile('/etc/passwd').includes('devops:');
 
       case 'sys-groupadd':
         return effCmd === 'groupadd' && effArgs.includes('deploy') && fs.readFile('/etc/group').includes('deploy:');
@@ -580,7 +621,7 @@ class LessonChecker {
       }
 
       case 'text-column-format':
-        return effCmd === 'column' && output.includes('servidor1');
+        return effCmd === 'column' && LessonChecker.hasShortFlag(effArgs, 't', '--table') && output.includes('servidor1');
 
       case 'tool-jq-parse':
         return hasCall(allCalls, 'jq') && output.includes('"version": "2.0.0"');
@@ -589,7 +630,8 @@ class LessonChecker {
         return hasCall(allCalls, 'jq') && raw.includes('.version') && output.includes('2.0.0');
 
       case 'process-kill':
-        return effCmd === 'kill' && effArgs.includes('123');
+        return effCmd === 'kill' && effArgs.includes('123') &&
+               !effArgs.some(a => a === '-9' || /KILL/i.test(a) || (effArgs.includes('-s') && /^(SIG)?KILL|9$/i.test(effArgs[effArgs.indexOf('-s') + 1] || '')));
 
       case 'process-kill-sigkill':
         return effCmd === 'kill' &&
@@ -601,7 +643,7 @@ class LessonChecker {
         return effCmd === 'pgrep' && raw.includes('nginx') && output.includes('123');
 
       case 'process-pkill':
-        return effCmd === 'pkill' && raw.includes('nginx') &&
+        return (effCmd === 'pkill' || effCmd === 'killall') && raw.includes('nginx') &&
                (commandEngine ? commandEngine.killedProcesses.has('123') : true);
 
       case 'process-jobs-bg':
@@ -619,14 +661,14 @@ class LessonChecker {
         const logNode = fs.getNode('/home/user/study_log.txt') || fs.getNode(fs.resolvePath('study_log.txt'));
         return raw.includes('>>') && !!logNode && logNode.content.includes('Linux Study Log') &&
                logNode.content.split('\n').filter(Boolean).length >= 2 &&
-               (hasCall(allCalls, 'date') || /\b202\d\b|UTC/.test(logNode.content));
+               (hasCall(allCalls, 'date') || /\b20\d{2}\b|UTC|GMT|BRT/.test(logNode.content));
       }
 
       case 'text-sed-replace':
         return effCmd === 'sed' && raw.includes('Linux') && output.includes('GNU/Linux');
 
       case 'text-sed-inplace':
-        return effCmd === 'sed' && LessonChecker.hasShortFlag(effArgs, 'i') && fs.readFile('/home/user/config.txt').includes('versao=2');
+        return effCmd === 'sed' && LessonChecker.hasShortFlag(effArgs, 'i', '--in-place') && fs.readFile('/home/user/config.txt').includes('versao=2');
 
       case 'text-sed-delete':
         return effCmd === 'sed' && raw.includes('/inativo/d') && output.includes('servidor1') && !output.includes('inativo');
@@ -680,7 +722,7 @@ class LessonChecker {
 
       case 'lpic-ln-symbolic': {
         const sym = fs.getRawNode('/home/user/readme-link');
-        return effCmd === 'ln' && effArgs.some(a => a === '-s' || a === '--symbolic') &&
+        return effCmd === 'ln' && LessonChecker.hasShortFlag(effArgs, 's', '--symbolic') &&
                !!sym && sym.type === 'symlink' && sym.target.includes('readme.txt');
       }
 
@@ -709,7 +751,9 @@ class LessonChecker {
         return effCmd === 'tar' && effArgs.some(a => a.includes('c')) && (effArgs.some(a => a.includes('z')) || raw.includes('-z')) && fs.getNode('/home/user/docs.tar.gz') !== null;
 
       case 'lpic-tar-extract-dir':
-        return effCmd === 'tar' && effArgs.some(a => a.includes('x')) && (effArgs.includes('-C') || effArgs.includes('--directory')) &&
+        return effCmd === 'tar' && effArgs.some(a => !a.startsWith('--') && a.includes('x')) &&
+               (effArgs.some(a => a === '-C' || a === '--directory' || a.startsWith('--directory=')) ||
+                allSessionText.includes('cd downloads') || fs.currentPath === '/home/user/downloads') &&
                fs.getNode('/home/user/downloads/documents/readme.txt') !== null;
 
       case 'lpic-zcat-log':
@@ -728,9 +772,6 @@ class LessonChecker {
         return hasCall(allCalls, 'grep') &&
                allCalls.some(c => c.effCmd === 'grep' && (LessonChecker.hasShortFlag(c.effArgs, 'r', '--recursive') || LessonChecker.hasShortFlag(c.effArgs, 'R'))) &&
                output.includes('Linux');
-
-      case 'lpic-ls-long-detail':
-        return effCmd === 'ls' && LessonChecker.hasShortFlag(effArgs, 'l', '--long');
 
       case 'lpic-umask':
         return effCmd === 'umask' && (commandEngine ? commandEngine.fs.umask === '0027' : true);
@@ -752,7 +793,7 @@ class LessonChecker {
 
       case 'lpic-find-tar-combo':
         return (hasCall(allCalls, 'find') || /\bfind\b/.test(allSessionText)) &&
-               hasCall(allCalls, 'tar') &&
+               (hasCall(allCalls, 'tar') || (effCmd === 'find' && effArgs.includes('-exec') && effArgs.includes('tar'))) &&
                raw.includes('proj-backup.tar') &&
                fs.getNode('/home/user/proj-backup.tar') !== null;
 
@@ -831,7 +872,8 @@ class LessonChecker {
         return effCmd === 'docker' && effArgs[0] === 'ps' && (effArgs.includes('-a') || effArgs.includes('--all'));
 
       case 'docker-run-detached':
-        return effCmd === 'docker' && effArgs[0] === 'run' && Array.from(docker.containers.values()).some(c => c.status.startsWith('Up'));
+        return effCmd === 'docker' && effArgs[0] === 'run' &&
+               Array.from(docker.containers.values()).some(c => c.name === 'web' && c.image === 'nginx' && c.status.startsWith('Up'));
 
       case 'docker-ps':
         return effCmd === 'docker' && effArgs[0] === 'ps' && !effArgs.includes('-a') && !effArgs.includes('--all');
@@ -849,13 +891,14 @@ class LessonChecker {
         return effCmd === 'docker' && effArgs[0] === 'rmi' && !docker.images.has('hello-world');
 
       case 'docker-run-port':
-        return effCmd === 'docker' && effArgs[0] === 'run' && Array.from(docker.containers.values()).some(c => c.ports && c.ports.includes('8080'));
+        return effCmd === 'docker' && effArgs[0] === 'run' &&
+               Array.from(docker.containers.values()).some(c => c.name === 'web2' && c.image === 'nginx' && c.status.startsWith('Up') && c.ports && c.ports.includes('8080') && c.ports.includes('80'));
 
       case 'docker-logs':
         return effCmd === 'docker' && effArgs[0] === 'logs' && raw.includes('web2') && output.includes('nginx');
 
       case 'docker-exec':
-        return effCmd === 'docker' && effArgs[0] === 'exec' && raw.includes('web2') && raw.includes('uname') && output.includes('Linux');
+        return effCmd === 'docker' && effArgs[0] === 'exec' && raw.includes('web2') && raw.includes('uname') && output.trim().length > 0;
 
       case 'docker-inspect':
         return effCmd === 'docker' && effArgs[0] === 'inspect' && raw.includes('web2') && output.includes('"Id"');
@@ -884,7 +927,9 @@ class LessonChecker {
                (commandEngine ? !Object.prototype.hasOwnProperty.call(commandEngine.aliases, 'c') : true);
 
       case 'bash-history-exec':
-        return (raw === '!!' || raw.startsWith('!!') || allSessionText.includes('!!') || (ctx && ctx.res && (ctx.res.rawCommand === '!!' || ctx.res.wasHistoryExpansion))) && output.length > 0;
+        return (raw === '!!' || raw.startsWith('!!') || allSessionText.includes('!!') || (ctx && ctx.res && (ctx.res.rawCommand === '!!' || ctx.res.wasHistoryExpansion))) &&
+               (!ctx || !ctx.res || (ctx.res.type !== 'error' && (!ctx.res.code || ctx.res.code === 0))) &&
+               output.length > 0;
 
       case 'bash-history-list':
         return effCmd === 'history' && !effArgs.includes('-c');
@@ -904,7 +949,7 @@ class LessonChecker {
       }
 
       case 'bash-redirect-devnull':
-        return raw.includes('2>') && raw.includes('/dev/null') && output.trim() === '';
+        return (raw.includes('2>') || raw.includes('&>')) && raw.includes('/dev/null') && output.trim() === '';
 
       case 'bash-here-string':
         return effCmd === 'cat' && raw.includes('<<<') && output.toLowerCase().includes('penguin gym');
@@ -932,7 +977,8 @@ class LessonChecker {
         return (effCmd === 'source' || effCmd === '.') && raw.includes('.bashrc');
 
       case 'bash-run-script':
-        return (raw.includes('bash') || raw.includes('./')) && raw.includes('script.sh') && output.length > 0;
+        return (hasCall(allCalls, 'bash') || hasCall(allCalls, 'sh') || hasCall(allCalls, 'source') || hasCall(allCalls, '.') || raw.includes('./')) &&
+               raw.includes('script.sh') && output.length > 0;
 
       case 'bash-exec-chmod': {
         const scr = fs.getNode('/home/user/script.sh');
@@ -961,7 +1007,7 @@ class LessonChecker {
       // 9. REDES & CONECTIVIDADE (26+ lições)
       // ==========================================
       case 'net-ip-addr':
-        return effCmd === 'ip' && effArgs.some(a => /^(a|addr|address)$/i.test(a)) && output.includes('inet ');
+        return ((effCmd === 'ip' && effArgs.some(a => /^(a|addr|address)$/i.test(a))) || effCmd === 'ifconfig') && output.includes('inet ');
 
       case 'net-ip-route':
         return effCmd === 'ip' && effArgs.some(a => /^(r|route)$/i.test(a)) && output.includes('default via');
@@ -983,8 +1029,8 @@ class LessonChecker {
       case 'net-curl-download': {
         const hasOut = fs.getNode('/home/user/saida.json') || fs.getNode(fs.resolvePath('saida.json')) ||
                        fs.getNode('/home/user/app.json') || fs.getNode(fs.resolvePath('app.json'));
-        return effCmd === 'curl' &&
-               effArgs.some(a => a === '--output' || a === '--remote-name' || a.startsWith('-o') || (a.startsWith('-') && !a.startsWith('--') && a.includes('O'))) &&
+        return hasCall(allCalls, 'curl') &&
+               allCalls.some(c => c.effCmd === 'curl' && c.effArgs.some(a => a === '--output' || a === '--remote-name' || a.startsWith('-o') || (a.startsWith('-') && !a.startsWith('--') && a.includes('O')))) &&
                hasOut !== null;
       }
 
@@ -1030,7 +1076,8 @@ class LessonChecker {
         return effCmd === 'rsync' && raw.includes('projects') && raw.includes('192.168.1.50') && output.includes('100%');
 
       case 'net-etc-hosts':
-        return (effCmd === 'cat' || effCmd === 'less' || effCmd === 'head') && raw.includes('/etc/hosts') && output.includes('penguin-gym');
+        return (hasCall(allCalls, 'cat') || hasCall(allCalls, 'less') || hasCall(allCalls, 'head') || hasCall(allCalls, 'grep')) &&
+               raw.includes('/etc/hosts') && output.includes('penguin-gym');
 
       case 'net-ufw-status':
         return effCmd === 'ufw' && effArgs.includes('status') && output.includes('Status:');
@@ -1068,7 +1115,7 @@ class LessonChecker {
 
       case 'db-order-limit':
         return hasCall(allCalls, 'sqlite3') && /order\s+by\s+age\s+desc/i.test(raw) && /limit\s+3/i.test(raw) &&
-               output.includes('Nico|45') && output.includes('Tama|38') && output.includes('Ken|33');
+               /Nico[|,]45/.test(output) && /Tama[|,]38/.test(output) && /Ken[|,]33/.test(output);
 
       case 'db-group-count':
         return hasCall(allCalls, 'sqlite3') && /group\s+by/i.test(raw) && /count/i.test(raw) && output.includes('Tokyo|4');
@@ -1224,12 +1271,15 @@ class LessonChecker {
       case 'auto-bash-boss-pipeline': {
         const scr = fs.getNode('/home/user/rotina_noturna.sh');
         const logNode = fs.getNode('/home/user/rotina.log');
+        const crontabTxt = (commandEngine && commandEngine.userCrontab) || '';
         return !!scr && scr.permissions.includes('x') &&
                fs.getNode('/home/user/downloads/documentos/nota.pdf') !== null &&
                fs.getNode('/home/user/downloads/rascunho.tmp') === null &&
                fs.getNode('/home/user/backups/documents/readme.txt') !== null &&
                !!logNode && (logNode.content || '').includes('Rotina OK') &&
-               Boolean(commandEngine && commandEngine.userCrontab.includes('rotina_noturna.sh'));
+               /0\s+3\s+\*\s+\*\s+\*/.test(crontabTxt) &&
+               crontabTxt.includes('rotina_noturna.sh') &&
+               crontabTxt.includes('rotina.log');
       }
 
       // ==========================================
@@ -1360,8 +1410,8 @@ class LessonChecker {
       // ==========================================
       case 'inc-nginx-404':
         return allSessionText.includes('/var/log/nginx') &&
-               (effCmd === 'ss' || effCmd === 'netstat') &&
-               (output.includes('LISTEN') || output.includes('OUÇA'));
+               (hasCall(allCalls, 'ss') || hasCall(allCalls, 'netstat') || /\b(ss|netstat)\b/.test(allSessionText)) &&
+               (output.includes('LISTEN') || output.includes('OUÇA') || output.includes(':80'));
 
       case 'inc-postgresql-down':
         return commandEngine
@@ -1381,10 +1431,17 @@ class LessonChecker {
                !docker.images.has('nginx') &&
                effCmd === 'docker' && effArgs[0] === 'rmi';
 
-      case 'inc-backup-pipeline':
-        return fs.getNode('/home/user/tokyo.csv') !== null &&
+      case 'inc-backup-pipeline': {
+        const csvNode = fs.getNode('/home/user/tokyo.csv');
+        const csvText = (csvNode && csvNode.content) || '';
+        const hasTokyoMembers = ['Pip', 'Momo', 'Kai', 'Luna'].every(n => csvText.includes(n));
+        const hasNoOtherCities = !['Osaka', 'Lisboa', 'Porto', 'Austin', 'Sapporo', 'Nico', 'Rio', 'Tama'].some(x => csvText.includes(x));
+        return !!csvNode &&
+               hasTokyoMembers &&
+               hasNoOtherCities &&
                fs.getNode('/home/user/tokyo.csv.gz') !== null &&
                effCmd === 'sha256sum' && raw.includes('tokyo.csv.gz') && output.length >= 64;
+      }
 
       case 'inc-script-perm-fix': {
         const scr = fs.getNode('/home/user/deploy.sh');

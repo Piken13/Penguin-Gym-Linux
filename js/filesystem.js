@@ -68,11 +68,64 @@ class VirtualFS {
     return {
       readme: `Este é um arquivo README de exemplo.
 É para praticar comandos Linux.
-🐧 Penguin Gym Linux`,
+🐧 Penguin Gym Linux
+
+Guia rápido de navegação e texto no terminal:
+01. pwd   - Mostra o diretório atual de trabalho
+02. ls    - Lista arquivos e subdiretórios (use -la para detalhes)
+03. cd    - Alterna entre pastas do sistema FHS
+04. cat   - Imprime conteúdo completo na saída padrão
+05. more  - Pagina arquivos longos tela a tela
+06. less  - Visualizador interativo com busca (/termo) e navegação
+07. head  - Mostra as primeiras linhas (padrão: 10 linhas)
+08. tail  - Mostra as últimas linhas ou acompanha logs (-f)
+09. grep  - Filtra linhas que combinam com padrões de texto
+10. find  - Localiza arquivos por nome, tipo ou permissão
+11. cp    - Copia arquivos e diretórios (-r)
+12. mv    - Move ou renomeia arquivos, pastas e links simbólicos
+13. rm    - Remove arquivos e diretórios (-r)
+14. chmod - Ajusta permissões de leitura, escrita e execução
+15. chown - Altera proprietário e grupo de arquivos
+16. ln    - Cria links simbólicos (-s) ou hardlinks
+17. tar   - Empacota e extrai arquivos (.tar e .tar.gz)
+18. gzip  - Comprime e descomprime arquivos individuais
+19. stat  - Exibe metadados completos de inode e timestamps
+20. wc    - Conta linhas (-l), palavras (-w) e bytes (-c)
+21. sort  - Ordena linhas alfabética ou numericamente (-n)
+22. uniq  - Remove duplicatas adjacentes ou conta ocorrências (-c)
+23. cut   - Extrai colunas delimitadas (-d e -f)
+24. tr    - Substitui ou transforma caracteres via stdin
+25. Dica: combine comandos com pipes (|) e redirecionamento (>).`,
       notes: `Notas de estudo:
 - Comando ls para exibir a lista de arquivos
 - Comando cd para navegar entre diretórios
-- Linux é incrível`,
+- Linux é incrível
+- Atalho pwd mostra o caminho absoluto do diretório atual
+- Use cat -n para visualizar linhas numeradas
+- O comando less permite navegar com Espaço, b e /busca
+- O comando more exibe conteúdo avançando tela a tela
+- head -n 5 exibe apenas as 5 primeiras linhas do texto
+- tail -n 5 exibe apenas as 5 últimas linhas do texto
+- wc -l conta quantas linhas existem no arquivo
+- grep -i faz busca sem diferenciar maiúsculas de minúsculas
+- cut -d " " -f 1 recorta o primeiro campo separado por espaço
+- sort -r ordena o conteúdo em ordem alfabética reversa
+- uniq -c contabiliza ocorrências seguidas após ordenação
+- Redirecionar com > sobrescreve; com >> acrescenta ao final
+- Redirecionar stderr usa 2> ou 2>&1 para unir com stdout
+- Permissões rwx definem leitura, escrita e execução (u/g/o)
+- umask 0027 restringe permissões padrão de novos arquivos
+- sudo executa comandos administrativos com privilégio root
+- systemctl gerencia daemons como nginx e postgresql
+- journalctl consulta os registros estruturados do systemd
+- ss -tuln lista portas TCP e UDP em escuta no servidor
+- curl testa endpoints HTTP e baixa respostas da API
+- git status e git diff --staged revisam mudanças antes do commit
+- docker ps e docker logs inspecionam contêineres ativos
+- sqlite3 consulta tabelas relacionais diretamente no terminal
+- ansible-playbook automatiza múltiplas máquinas via YAML
+- Sempre leia mensagens de erro com atenção antes de agir
+- Fim das notas de revisão do Penguin Gym Linux.`,
       data: `banana
 banana
 apple
@@ -432,6 +485,18 @@ SwapFree:        2097152 kB`,
         if (dlTest) this.removeFile('/home/user/downloads/test.sh');
       }
 
+      // Garante replay limpo para lições que criam pastas/arquivos com nomes fixos (mesmo com Auto-limpar desligado)
+      if (lessonId === 'file-mkdir') {
+        if (this.getRawNode('/home/user/myproject')) {
+          try { this.removeRecursive('/home/user/myproject', true); } catch {}
+        }
+      }
+      if (lessonId === 'permission-sudo-mkdir') {
+        if (this.getRawNode('/opt/myfolder')) {
+          try { this.removeRecursive('/opt/myfolder', true); } catch {}
+        }
+      }
+
       // Se a missão é remover o diretório vazio downloads (rmdir downloads), garante que downloads exista e esteja vazio
       if (lessonId === 'file-rmdir') {
         const dl = this.getNode('/home/user/downloads');
@@ -541,6 +606,16 @@ SwapFree:        2097152 kB`,
             { path: 'projects/', type: 'directory' },
             { path: 'projects/test.sh', type: 'file', content: this.getBaselineContents().testSh }
           ];
+        }
+      }
+      if (lessonId === 'lpic-ln-symbolic') {
+        if (this.getRawNode('/home/user/readme-link')) {
+          try { this.removeFile('/home/user/readme-link', true); } catch {}
+        }
+      }
+      if (lessonId === 'lpic-ln-hardlink') {
+        if (this.getRawNode('/home/user/notes-hard.txt')) {
+          try { this.removeFile('/home/user/notes-hard.txt', true); } catch {}
         }
       }
       if (lessonId === 'lpic-readlink') {
@@ -977,6 +1052,14 @@ SwapFree:        2097152 kB`,
     return this.normalizePath(path);
   }
 
+  resolveRelativeFrom(baseDir, path) {
+    if (!path) return baseDir || '/';
+    const expanded = this.expandTilde(path);
+    if (expanded.startsWith('/')) return this.normalizePath(expanded);
+    const prefix = !baseDir || baseDir === '/' ? '' : baseDir;
+    return this.normalizePath(`${prefix}/${expanded}`);
+  }
+
   /**
    * Resolve todos os symlinks na árvore até o caminho canônico real (para realpath / readlink -f)
    */
@@ -996,11 +1079,14 @@ SwapFree:        2097152 kB`,
       if (!next) {
         return builtPath + '/' + part;
       }
+      let linkParent = builtPath || '/';
       builtPath += '/' + part;
       while (next && next.type === 'symlink' && depth < 12) {
         depth++;
-        builtPath = this.normalizePath(next.target);
-        next = this.getRawNode(builtPath);
+        const resolved = this.resolveRelativeFrom(linkParent, next.rawTarget || next.target);
+        builtPath = resolved;
+        linkParent = this.getParentPath(resolved);
+        next = this.getRawNode(resolved);
       }
       curr = next;
     }
@@ -1012,14 +1098,21 @@ SwapFree:        2097152 kB`,
     if (norm === '/') return this.root;
     const parts = norm.split('/').filter(Boolean);
     let curr = this.root;
+    let currPath = '';
     let depth = 0;
     for (const part of parts) {
       if (!curr || curr.type !== 'directory' || !curr.children) return null;
+      const parentPath = currPath || '/';
       curr = curr.children[part];
       if (!curr) return null;
+      currPath = (parentPath === '/' ? '' : parentPath) + '/' + part;
+      let linkParent = parentPath;
       while (curr && curr.type === 'symlink' && depth < 10) {
         depth++;
-        curr = this.getRawNode(curr.target);
+        const resolved = this.resolveRelativeFrom(linkParent, curr.rawTarget || curr.target);
+        currPath = resolved;
+        linkParent = this.getParentPath(resolved);
+        curr = this.getRawNode(resolved);
       }
     }
     return curr;
@@ -1137,7 +1230,15 @@ SwapFree:        2097152 kB`,
     return Object.keys(node.children || {});
   }
 
-  createFile(path, content = '', owner = null, permissions = 'rw-r--r--') {
+  applyUmask(isDir = false) {
+    const mask = parseInt(this.umask || '0022', 8) & 0o777;
+    const base = isDir ? 0o777 : 0o666;
+    const val = base & (~mask);
+    const triad = (n) => (n & 4 ? 'r' : '-') + (n & 2 ? 'w' : '-') + (n & 1 ? 'x' : '-');
+    return triad((val >> 6) & 7) + triad((val >> 3) & 7) + triad(val & 7);
+  }
+
+  createFile(path, content = '', owner = null, permissions = null) {
     const target = this.resolvePath(path);
     const existing = this.getNode(target);
     if (existing && existing.isDeviceNull) {
@@ -1160,11 +1261,12 @@ SwapFree:        2097152 kB`,
     }
     const isHomeUser = target.startsWith('/home/user/') || target === '/home/user';
     const effectiveOwner = owner || (isHomeUser ? 'user' : (this.sudoMode ? 'root' : 'user'));
-    parent.children[name] = this.makeFile(name, content, effectiveOwner, effectiveOwner, permissions);
+    const effectivePerms = permissions || this.applyUmask(false);
+    parent.children[name] = this.makeFile(name, content, effectiveOwner, effectiveOwner, effectivePerms);
     return target;
   }
 
-  createDirectory(path, recursive = false, mode = 'rwxr-xr-x', owner = null) {
+  createDirectory(path, recursive = false, mode = null, owner = null) {
     const target = this.resolvePath(path);
     if (recursive) {
       const parts = target.split('/').filter(Boolean);
@@ -1194,7 +1296,8 @@ SwapFree:        2097152 kB`,
     }
     const isHomeUser = target.startsWith('/home/user/') || target === '/home/user';
     const effectiveOwner = owner || (isHomeUser ? 'user' : (this.sudoMode ? 'root' : 'user'));
-    parent.children[name] = this.makeDir(name, {}, effectiveOwner, effectiveOwner, mode);
+    const effectiveMode = mode || this.applyUmask(true);
+    parent.children[name] = this.makeDir(name, {}, effectiveOwner, effectiveOwner, effectiveMode);
     parent.links = (parent.links || 2) + 1;
     parent.mtime = Date.now();
     return target;
@@ -1372,27 +1475,83 @@ SwapFree:        2097152 kB`,
 
   moveFile(srcPath, destPath) {
     const src = this.resolvePath(srcPath);
+    if (src === '/' || src === '/home/user') {
+      throw new Error(`mv: operação recusada ao mover '${srcPath}'`);
+    }
+    const srcParentPath = this.getParentPath(src);
+    const srcParent = this.getNode(srcParentPath);
+    const srcName = this.getFileName(src);
+    const srcRaw = srcParent && srcParent.children ? srcParent.children[srcName] : null;
+    if (!srcRaw) {
+      throw new Error(`mv: não foi possível obter estado de '${srcPath}': Arquivo ou diretório não encontrado`);
+    }
+    if (!this.hasPermission(srcParent, 'w')) {
+      throw new Error(`mv: não foi possível mover '${srcPath}': Permissão negada`);
+    }
+
     let dest = this.resolvePath(destPath);
-    const destNode = this.getNode(dest);
-    if (destNode && destNode.type === 'directory') {
-      dest = (dest === '/' ? '' : dest) + '/' + this.getFileName(src);
+    const destTarget = this.getNode(dest);
+    if (destTarget && destTarget.type === 'directory') {
+      dest = (dest === '/' ? '' : dest) + '/' + srcName;
     }
     if (src === dest) {
       throw new Error(`mv: '${srcPath}' e '${destPath}' são o mesmo arquivo`);
     }
-    if (dest.startsWith(src + '/')) {
+    if (srcRaw.type === 'directory' && dest.startsWith(src + '/')) {
       throw new Error(`mv: não é possível mover '${srcPath}' para um subdiretório de si mesmo, '${dest}'`);
     }
-    const finalDest = this.copyFile(srcPath, destPath);
-    this.removeRecursive(srcPath);
-    return finalDest;
+
+    const destParentPath = this.getParentPath(dest);
+    const destParent = this.getNode(destParentPath);
+    const destName = this.getFileName(dest);
+    if (!destParent || destParent.type !== 'directory') {
+      throw new Error(`mv: não foi possível mover '${srcPath}' para '${destPath}': Arquivo ou diretório não encontrado`);
+    }
+    if (!this.hasPermission(destParent, 'w')) {
+      throw new Error(`mv: não foi possível mover '${srcPath}' para '${destPath}': Permissão negada`);
+    }
+
+    const existingDest = destParent.children ? destParent.children[destName] : null;
+    if (existingDest) {
+      if (existingDest.type === 'directory') {
+        if (srcRaw.type !== 'directory') {
+          throw new Error(`mv: não é possível sobrescrever o diretório '${dest}' com um não-diretório`);
+        }
+        if (Object.keys(existingDest.children || {}).length > 0) {
+          throw new Error(`mv: não foi possível mover '${srcPath}' para '${dest}': Diretório não vazio`);
+        }
+        if (destParent.links > 2) destParent.links--;
+      } else if (existingDest.type === 'file' && existingDest.inode && existingDest.inode !== srcRaw.inode) {
+        this.syncInodeNodes(existingDest.inode, (n) => {
+          if (n.links > 1) n.links--;
+        });
+      }
+    }
+
+    const now = Date.now();
+    delete srcParent.children[srcName];
+    if (srcRaw.type === 'directory') {
+      if (srcParent.links > 2) srcParent.links--;
+      destParent.links = (destParent.links || 2) + 1;
+    }
+    srcRaw.name = destName;
+    srcRaw.ctime = now;
+    if (srcRaw.type === 'symlink' && srcRaw.rawTarget) {
+      srcRaw.target = this.resolveRelativeFrom(destParentPath, srcRaw.rawTarget);
+    }
+    if (!destParent.children) destParent.children = {};
+    destParent.children[destName] = srcRaw;
+    srcParent.mtime = now;
+    destParent.mtime = now;
+    return dest;
   }
 
   createSymlink(target, linkPath) {
     const link = this.resolvePath(linkPath);
-    const parent = this.getParentDirectory(link);
+    const parentPath = this.getParentPath(link);
+    const parent = this.getNode(parentPath);
     const name = this.getFileName(link);
-    if (!parent) throw new Error(`ln: destino inválido '${linkPath}'`);
+    if (!parent || parent.type !== 'directory') throw new Error(`ln: destino inválido '${linkPath}'`);
     if (!this.hasPermission(parent, 'w')) {
       throw new Error(`ln: não foi possível criar link simbólico '${linkPath}': Permissão negada`);
     }
@@ -1402,7 +1561,7 @@ SwapFree:        2097152 kB`,
       type: 'symlink',
       inode: this.nextInode++,
       rawTarget: target,
-      target: this.resolvePath(target),
+      target: this.resolveRelativeFrom(parentPath, target),
       owner: this.sudoMode ? 'root' : 'user',
       group: this.sudoMode ? 'root' : 'user',
       permissions: 'rwxrwxrwx',

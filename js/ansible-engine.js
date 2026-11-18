@@ -95,6 +95,7 @@ class AnsibleEngine {
     }
 
     const groups = { all: [] };
+    const groupVars = {};
     const hostVars = {};
     let currentGroup = 'ungrouped';
     groups[currentGroup] = [];
@@ -103,13 +104,35 @@ class AnsibleEngine {
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (!line || line.startsWith('#') || line.startsWith(';')) continue;
-      const groupMatch = line.match(/^\[([A-Za-z0-9_.-]+)(?::vars)?\]$/);
+      const groupMatch = line.match(/^\[([^\]]+)\]$/);
       if (groupMatch) {
-        currentGroup = groupMatch[1];
-        if (!groups[currentGroup]) groups[currentGroup] = [];
+        currentGroup = groupMatch[1].trim();
+        if (currentGroup.endsWith(':vars')) {
+          const grpName = currentGroup.slice(0, -5);
+          if (!groupVars[grpName]) groupVars[grpName] = {};
+        } else if (!currentGroup.endsWith(':children') && !groups[currentGroup]) {
+          groups[currentGroup] = [];
+        }
         continue;
       }
-      if (line.includes('=') && currentGroup.endsWith(':vars')) continue;
+      if (currentGroup.endsWith(':vars')) {
+        const eq = line.indexOf('=');
+        if (eq !== -1) {
+          const grpName = currentGroup.slice(0, -5);
+          if (!groupVars[grpName]) groupVars[grpName] = {};
+          groupVars[grpName][line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+        }
+        continue;
+      }
+      if (currentGroup.endsWith(':children')) {
+        const grpName = currentGroup.slice(0, -9);
+        if (!groups[grpName]) groups[grpName] = [];
+        const childHosts = groups[line] || [];
+        for (const ch of childHosts) {
+          if (!groups[grpName].includes(ch)) groups[grpName].push(ch);
+        }
+        continue;
+      }
 
       const tokens = line.split(/\s+/);
       const hostAlias = tokens[0];
@@ -122,7 +145,7 @@ class AnsibleEngine {
         groups.all.push(hostAlias);
       }
 
-      const vars = {};
+      const vars = { ...(hostVars[hostAlias] || {}) };
       for (const tok of tokens.slice(1)) {
         const eq = tok.indexOf('=');
         if (eq !== -1) {
@@ -130,6 +153,13 @@ class AnsibleEngine {
         }
       }
       hostVars[hostAlias] = vars;
+    }
+
+    for (const [grpName, gVars] of Object.entries(groupVars)) {
+      const members = grpName === 'all' ? groups.all : (groups[grpName] || []);
+      for (const h of members) {
+        hostVars[h] = { ...gVars, ...(hostVars[h] || {}) };
+      }
     }
 
     return { groups, hostVars, path: resolved };
@@ -267,7 +297,28 @@ class AnsibleEngine {
         return { changed: false, skipped: true, msg: 'remote command skipped in check mode' };
       }
       const outs = [];
-      for (const sub of cmdText.split('&&').map(s => s.trim()).filter(Boolean)) {
+      const subCmds = [];
+      let cur = '';
+      let q = null;
+      for (let idx = 0; idx < cmdText.length; idx++) {
+        const ch = cmdText[idx];
+        if (ch === "'" || ch === '"') { q = q === ch ? null : (q || ch); cur += ch; continue; }
+        if (!q && ch === '&' && cmdText[idx + 1] === '&') {
+          if (cur.trim()) subCmds.push(cur.trim());
+          cur = '';
+          idx++;
+          continue;
+        }
+        if (!q && ch === ';') {
+          if (cur.trim()) subCmds.push(cur.trim());
+          cur = '';
+          continue;
+        }
+        cur += ch;
+      }
+      if (cur.trim()) subCmds.push(cur.trim());
+
+      for (const sub of subCmds) {
         if (sub === 'uptime') outs.push(' 10:45:00 up 12 days,  3:14,  1 user,  load average: 0.08, 0.05, 0.01');
         else if (sub.startsWith('df')) outs.push('/dev/sda1        50G   12G   38G  24% /');
         else if (sub === 'whoami') outs.push(become ? 'root' : 'ubuntu');
@@ -554,10 +605,23 @@ class AnsibleEngine {
    * Parser YAML didático para playbooks Ansible com 1 ou mais plays.
    */
   parseYamlPlaybook(yamlText) {
+    const stripInlineComment = (str) => {
+      let inQ = null;
+      for (let idx = 0; idx < str.length; idx++) {
+        const ch = str[idx];
+        if (ch === "'" || ch === '"') {
+          inQ = inQ === ch ? null : (inQ || ch);
+        } else if (!inQ && ch === '#' && (idx === 0 || /\s/.test(str[idx - 1]))) {
+          return str.slice(0, idx).trimEnd();
+        }
+      }
+      return str;
+    };
+
     const rawLines = (yamlText || '').split('\n');
     const lines = [];
     for (const raw of rawLines) {
-      const noDoc = raw.replace(/\r$/, '');
+      const noDoc = stripInlineComment(raw.replace(/\r$/, ''));
       const trimmed = noDoc.trim();
       if (!trimmed || trimmed === '---' || trimmed === '...' || trimmed.startsWith('#')) continue;
       const indent = noDoc.search(/\S/);
@@ -591,12 +655,10 @@ class AnsibleEngine {
         const rest = text.slice(colIdx + 1).trim();
         i++;
         if (rest === '') {
-          if (i < lines.length && lines[i].indent > indent) {
-            if (lines[i].text.startsWith('- ')) {
-              obj[k] = parseList(lines[i].indent);
-            } else {
-              obj[k] = parseBlockDict(lines[i].indent);
-            }
+          if (i < lines.length && lines[i].indent >= indent && lines[i].text.startsWith('- ')) {
+            obj[k] = parseList(lines[i].indent);
+          } else if (i < lines.length && lines[i].indent > indent) {
+            obj[k] = parseBlockDict(lines[i].indent);
           } else {
             obj[k] = {};
           }
@@ -697,6 +759,10 @@ class AnsibleEngine {
       if ((a === '-i' || a === '--inventory') && args[i + 1]) invPath = args[++i];
       else if (a === '--check' || a === '-C') checkMode = true;
       else if (a === '--diff' || a === '-D') diffMode = true;
+      else if (/^-[CD]+$/.test(a)) {
+        if (a.includes('C')) checkMode = true;
+        if (a.includes('D')) diffMode = true;
+      }
       else if (a === '--syntax-check') syntaxCheck = true;
       else if ((a === '-e' || a === '--extra-vars') && args[i + 1]) {
         const kv = this.parseKeyValueArgs(args[++i]);

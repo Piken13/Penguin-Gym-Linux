@@ -144,10 +144,15 @@ class App {
       btn.appendChild(count);
 
       btn.addEventListener('click', () => {
+        const hadSearch = Boolean(this.searchQuery.trim());
+        const sameCategory = cat.id === this.currentCategory;
         this.searchQuery = '';
         const searchInput = document.getElementById('lessonSearchInput');
         if (searchInput) searchInput.value = '';
-        this.setActiveTab(cat.id);
+        if (sameCategory && !hadSearch) {
+          return;
+        }
+        this.setActiveTab(cat.id, !sameCategory);
       });
 
       container.appendChild(btn);
@@ -193,6 +198,9 @@ class App {
       if (countEl) countEl.textContent = `${lessons.length}`;
     } else {
       lessons = ALL_LESSONS.filter(l => l.category === this.currentCategory);
+      const catObj = LESSON_CATEGORIES.find(c => c.id === this.currentCategory);
+      const titleEl = document.getElementById('currentCategoryTitle');
+      if (titleEl && catObj) titleEl.textContent = `${catObj.icon} ${catObj.label}`;
       const completedInCat = lessons.filter(l => this.completedLessons.has(l.id)).length;
       const countEl = document.getElementById('currentCategoryCount');
       if (countEl) countEl.textContent = `${completedInCat}/${lessons.length}`;
@@ -240,6 +248,17 @@ class App {
       item.appendChild(diff);
 
       const activate = () => {
+        const sidebar = document.getElementById('appSidebar');
+        if (sidebar && sidebar.classList.contains('mobile-open')) {
+          sidebar.classList.remove('mobile-open');
+          const toggle = document.getElementById('btnMobileSidebarToggle');
+          const chev = document.getElementById('mobileSidebarChevron');
+          if (toggle) toggle.setAttribute('aria-expanded', 'false');
+          if (chev) chev.textContent = '▾';
+        }
+        if (this.currentLesson && this.currentLesson.id === lesson.id) {
+          return;
+        }
         if (lesson.category !== this.currentCategory) {
           this.currentCategory = lesson.category;
           document.querySelectorAll('.cat-pill-btn').forEach(b => {
@@ -273,7 +292,8 @@ class App {
     }
   }
 
-  selectLesson(lesson) {
+  selectLesson(lesson, { forceBanner = true } = {}) {
+    const isSameLesson = this.currentLesson && this.currentLesson.id === lesson.id;
     this.currentLesson = lesson;
     this.lessonSessionHistory = [];
     this.hideCompletionBar();
@@ -311,6 +331,12 @@ class App {
     const numBadge = document.getElementById('lessonNumberBadge');
     if (numBadge) {
       numBadge.textContent = `Lição #${globalIdx + 1} de ${ALL_LESSONS.length}`;
+    }
+
+    const mobileSummary = document.getElementById('mobileSidebarSummary');
+    if (mobileSummary) {
+      const catObj = LESSON_CATEGORIES.find(c => c.id === lesson.category);
+      mobileSummary.textContent = `📚 ${catObj ? catObj.label : 'Trilhas'} • #${globalIdx + 1} (${this.completedLessons.size}/${ALL_LESSONS.length})`;
     }
 
     const diffBadge = document.getElementById('challengeDifficultyBadge');
@@ -366,14 +392,20 @@ class App {
       }
     });
 
-    this.terminal.writeLine(`<div class="terminal-lesson-banner">
+    if (forceBanner && !isSameLesson) {
+      this.terminal.writeLine(`<div class="terminal-lesson-banner">
       <span class="banner-title">🎯 Lição #${globalIdx + 1}: ${this.escapeHtml(lesson.title)}</span><br>
       <span class="banner-desc">${this.formatInlineMarkdown(lesson.description)}</span>
     </div>`);
-    this.terminal.scrollToBottom();
+      this.terminal.scrollToBottom();
+    }
 
     const input = document.getElementById('terminalInput');
-    if (input) input.focus();
+    if (input) {
+      const focusInput = () => input.focus();
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusInput);
+      else setTimeout(focusInput, 0);
+    }
 
     this.updateGuiInspector();
     this.saveProgress();
@@ -462,8 +494,8 @@ class App {
     if (!this.currentLesson) return;
 
     // Se o comando gerou um erro de execução no terminal (ex: sintaxe incorreta, diretório já existe),
-    // a lição não deve ser validada como concluída (exceto na lição de repetição de histórico ou fallback ||)
-    if (res && res.type === 'error' && this.currentLesson.id !== 'bash-history-exec' && this.currentLesson.id !== 'bash-or-fallback') {
+    // a lição não deve ser validada como concluída (exceto na lição de fallback ||)
+    if (res && res.type === 'error' && this.currentLesson.id !== 'bash-or-fallback') {
       return;
     }
 
@@ -536,8 +568,16 @@ class App {
         this.setActiveTab(next.category, false);
       }
       this.selectLesson(next);
-    } else {
+    } else if (this.completedLessons.size >= ALL_LESSONS.length && ALL_LESSONS.length > 0) {
       this.showLevelupOverlay('Curso Completo!', `Incrível! Você concluiu todos os ${ALL_LESSONS.length} exercícios do Penguin Gym Linux! 🐧🏆`);
+    } else {
+      const nextPending = all.find(l => !this.completedLessons.has(l.id));
+      if (nextPending) {
+        if (nextPending.category !== this.currentCategory) {
+          this.setActiveTab(nextPending.category, false);
+        }
+        this.selectLesson(nextPending);
+      }
     }
   }
 
@@ -612,8 +652,9 @@ class App {
 
       const meta = document.createElement('span');
       meta.className = 'gui-file-meta';
+      const itemCount = Object.keys(node.children || {}).length;
       meta.textContent = node.type === 'directory'
-        ? `${Object.keys(node.children || {}).length} itens`
+        ? `${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`
         : `${node.permissions || 'rw-r--r--'}`;
 
       row.appendChild(main);
@@ -940,6 +981,16 @@ class App {
       if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (isCompletionVisible && isInputEmpty) {
           e.preventDefault();
+          e.stopPropagation();
+          if (this.terminal && typeof this.terminal.suppressCharOnce === 'function') {
+            this.terminal.suppressCharOnce('n');
+          }
+          if (terminalInput) {
+            terminalInput.value = '';
+            if (this.terminal && typeof this.terminal.resizeInput === 'function') {
+              this.terminal.resizeInput();
+            }
+          }
           this.advanceToNextLesson();
           return;
         }
@@ -958,13 +1009,27 @@ class App {
       }
     });
 
+    // Mobile sidebar drawer toggle
+    const mobileToggleBtn = document.getElementById('btnMobileSidebarToggle');
+    const sidebarEl = document.getElementById('appSidebar');
+    const mobileChevron = document.getElementById('mobileSidebarChevron');
+    if (mobileToggleBtn && sidebarEl) {
+      mobileToggleBtn.addEventListener('click', () => {
+        const isOpen = sidebarEl.classList.toggle('mobile-open');
+        mobileToggleBtn.setAttribute('aria-expanded', String(isOpen));
+        if (mobileChevron) mobileChevron.textContent = isOpen ? '▴' : '▾';
+      });
+    }
+
     // Search input
     const searchInput = document.getElementById('lessonSearchInput');
     if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
+      const handleSearch = (e) => {
         this.searchQuery = e.target.value;
         this.renderLessonLists();
-      });
+      };
+      searchInput.addEventListener('input', handleSearch);
+      searchInput.addEventListener('search', handleSearch);
     }
 
     // Prev / Next lesson buttons
@@ -1010,7 +1075,7 @@ class App {
       steps.forEach(step => {
         this.terminal.runCommandProgrammatically(step);
       });
-      // Se o comando abriu o editor nano (ex: nano script.sh ou crontab -e), preenche e salva automaticamente
+      // Se o comando abriu o editor nano (ex: nano script.sh ou crontab -e), mostra o editor preenchido antes de gravar e fechar
       const nanoTextarea = document.getElementById('nanoTextarea');
       const nanoSaveBtn = document.getElementById('nanoSaveBtn');
       const nanoExitBtn = document.getElementById('nanoExitBtn');
@@ -1022,8 +1087,14 @@ class App {
         } else if (!nanoTextarea.value.trim()) {
           nanoTextarea.value = '#!/bin/bash\necho "ok"\n';
         }
-        nanoSaveBtn.click();
-        if (nanoExitBtn) nanoExitBtn.click();
+        nanoTextarea.dispatchEvent(new Event('input'));
+        setTimeout(() => {
+          if (!nanoSaveBtn.isConnected) return;
+          nanoSaveBtn.click();
+          setTimeout(() => {
+            if (nanoExitBtn && nanoExitBtn.isConnected) nanoExitBtn.click();
+          }, 420);
+        }, 420);
       }
     };
     if (runSolBtn) runSolBtn.addEventListener('click', executeCurrentSolution);
@@ -1063,19 +1134,62 @@ class App {
     const listBtn = document.getElementById('btnGuiListDir');
     const newFolderBtn = document.getElementById('btnGuiNewFolder');
     const newFileBtn = document.getElementById('btnGuiNewFile');
+    const createPrompt = document.getElementById('guiCreatePrompt');
+    const createInput = document.getElementById('guiCreateInput');
+    const createConfirmBtn = document.getElementById('btnGuiCreateConfirm');
+    const createCancelBtn = document.getElementById('btnGuiCreateCancel');
     const closePreviewBtn = document.getElementById('btnClosePreview');
+
+    let pendingCreateKind = 'dir';
+    const nextAvailableName = (base, ext = '') => {
+      let candidate = `${base}${ext}`;
+      let idx = 2;
+      while (this.fs.getRawNode(candidate)) {
+        candidate = `${base}_${idx}${ext}`;
+        idx++;
+      }
+      return candidate;
+    };
+    const openCreatePrompt = (kind) => {
+      pendingCreateKind = kind;
+      if (!createPrompt || !createInput) {
+        const cmd = kind === 'dir' ? `mkdir ${nextAvailableName('nova_pasta')}` : `touch ${nextAvailableName('arquivo', '.txt')}`;
+        this.terminal.runCommandProgrammatically(cmd);
+        return;
+      }
+      createPrompt.classList.remove('d-none');
+      createInput.value = kind === 'dir' ? nextAvailableName('nova_pasta') : nextAvailableName('arquivo', '.txt');
+      createInput.placeholder = kind === 'dir' ? 'Nome da pasta...' : 'Nome do arquivo...';
+      createInput.focus();
+      createInput.select();
+    };
+    const submitCreatePrompt = () => {
+      if (!createInput || !createPrompt) return;
+      const rawName = createInput.value.trim();
+      createPrompt.classList.add('d-none');
+      if (!rawName) return;
+      const safeArg = /\s/.test(rawName) ? `"${rawName.replace(/"/g, '\\"')}"` : rawName;
+      this.terminal.runCommandProgrammatically(pendingCreateKind === 'dir' ? `mkdir ${safeArg}` : `touch ${safeArg}`);
+    };
 
     if (upBtn) upBtn.addEventListener('click', () => this.terminal.runCommandProgrammatically('cd ..'));
     if (homeBtn) homeBtn.addEventListener('click', () => this.terminal.runCommandProgrammatically('cd ~'));
     if (listBtn) listBtn.addEventListener('click', () => this.terminal.runCommandProgrammatically('ls -la'));
-    if (newFolderBtn) {
-      newFolderBtn.addEventListener('click', () => {
-        this.terminal.runCommandProgrammatically('mkdir nova_pasta');
-      });
+    if (newFolderBtn) newFolderBtn.addEventListener('click', () => openCreatePrompt('dir'));
+    if (newFileBtn) newFileBtn.addEventListener('click', () => openCreatePrompt('file'));
+    if (createConfirmBtn) createConfirmBtn.addEventListener('click', submitCreatePrompt);
+    if (createCancelBtn && createPrompt) {
+      createCancelBtn.addEventListener('click', () => createPrompt.classList.add('d-none'));
     }
-    if (newFileBtn) {
-      newFileBtn.addEventListener('click', () => {
-        this.terminal.runCommandProgrammatically('touch arquivo.txt');
+    if (createInput && createPrompt) {
+      createInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitCreatePrompt();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          createPrompt.classList.add('d-none');
+        }
       });
     }
     if (closePreviewBtn) {
@@ -1089,12 +1203,6 @@ class App {
     if (dbSelect) {
       dbSelect.addEventListener('change', () => this.renderGuiSql());
     }
-
-    // Botões de restauração ao ponto inicial limpo
-    const resetEnvBtn = document.getElementById('btnGuiResetEnv');
-    const resetFilesBtn = document.getElementById('btnGuiResetFiles');
-    if (resetEnvBtn) resetEnvBtn.addEventListener('click', () => this.resetToInitialPoint(true));
-    if (resetFilesBtn) resetFilesBtn.addEventListener('click', () => this.resetToInitialPoint(true));
 
     const autoCleanChk = document.getElementById('chkAutoCleanLessons');
     if (autoCleanChk) {
@@ -1157,9 +1265,18 @@ class App {
   }
 
   formatInlineMarkdown(str) {
-    return this.escapeHtml(str)
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
+    if (!str) return '';
+    const codeSlots = [];
+    const withPlaceholders = this.escapeHtml(str).replace(/`([^`]+)`/g, (_, code) => {
+      const idx = codeSlots.length;
+      codeSlots.push(`<code>${code}</code>`);
+      return `\x00CODE_${idx}\x00`;
+    });
+    const formatted = withPlaceholders
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^\w*])\*([^\s*\n][^*\n]*?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>')
       .replace(/\n/g, '<br>');
+    return formatted.replace(/\x00CODE_(\d+)\x00/g, (_, idx) => codeSlots[Number(idx)] || '');
   }
 
   escapeHtml(str) {

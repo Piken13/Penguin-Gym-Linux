@@ -28,6 +28,10 @@ class TerminalUI {
     this.reverseSearchIndex = -1;
     this.preSearchInput = '';
     this.onNextRequested = null;
+    this._suppressEnterInsert = false;
+    this._suppressEnterTimer = null;
+    this._suppressNextChar = null;
+    this._suppressCharTimer = null;
 
     this.init();
   }
@@ -57,7 +61,47 @@ class TerminalUI {
 
     if (this.inputElement) {
       this.inputElement.addEventListener('keydown', (e) => this.handleKeyDown(e));
-      this.inputElement.addEventListener('input', () => this.updateCompletionChips());
+      this.inputElement.addEventListener('keypress', (e) => {
+        if (this._suppressEnterInsert && (e.key === 'Enter' || e.charCode === 13)) {
+          e.preventDefault();
+          return;
+        }
+        if (this._suppressNextChar && e.key && e.key.toLowerCase() === this._suppressNextChar) {
+          e.preventDefault();
+        }
+      });
+      this.inputElement.addEventListener('beforeinput', (e) => {
+        if (this._suppressEnterInsert && (e.inputType === 'insertLineBreak' || e.data === '\n' || e.data === '\r')) {
+          e.preventDefault();
+          return;
+        }
+        if (this._suppressNextChar && e.data && e.data.toLowerCase() === this._suppressNextChar) {
+          e.preventDefault();
+          this.clearSuppressedChar();
+        }
+      });
+      this.inputElement.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') {
+          this.clearSuppressedEnter();
+        }
+        if (this._suppressNextChar && e.key && e.key.toLowerCase() === this._suppressNextChar) {
+          this.clearSuppressedChar();
+        }
+      });
+      this.inputElement.addEventListener('input', () => {
+        if (this._suppressEnterInsert && this.inputElement.value === '\n') {
+          this.inputElement.value = '';
+          this.clearSuppressedEnter();
+        } else if (this._suppressNextChar && this.inputElement.value.toLowerCase() === this._suppressNextChar) {
+          this.inputElement.value = '';
+          this.clearSuppressedChar();
+        }
+        this.resizeInput();
+        this.updateCompletionChips();
+      });
+      this.inputElement.addEventListener('paste', () => {
+        setTimeout(() => this.resizeInput(), 0);
+      });
     }
 
     if (this.tabBtn) {
@@ -79,10 +123,60 @@ class TerminalUI {
     }
   }
 
+  suppressEnterOnce() {
+    this._suppressEnterInsert = true;
+    if (this._suppressEnterTimer) clearTimeout(this._suppressEnterTimer);
+    this._suppressEnterTimer = setTimeout(() => {
+      this._suppressEnterInsert = false;
+      this._suppressEnterTimer = null;
+    }, 120);
+  }
+
+  clearSuppressedEnter() {
+    this._suppressEnterInsert = false;
+    if (this._suppressEnterTimer) {
+      clearTimeout(this._suppressEnterTimer);
+      this._suppressEnterTimer = null;
+    }
+  }
+
+  suppressCharOnce(ch) {
+    this._suppressNextChar = (ch || '').toLowerCase() || null;
+    if (this._suppressCharTimer) clearTimeout(this._suppressCharTimer);
+    this._suppressCharTimer = setTimeout(() => {
+      this._suppressNextChar = null;
+      this._suppressCharTimer = null;
+    }, 120);
+  }
+
+  clearSuppressedChar() {
+    this._suppressNextChar = null;
+    if (this._suppressCharTimer) {
+      clearTimeout(this._suppressCharTimer);
+      this._suppressCharTimer = null;
+    }
+  }
+
+  resizeInput() {
+    const el = this.inputElement;
+    if (!el || el.tagName !== 'TEXTAREA') return;
+    el.style.height = 'auto';
+    if (!el.value || !el.value.includes('\n')) {
+      el.style.overflowY = 'hidden';
+      el.style.height = '';
+      return;
+    }
+    const maxH = 180;
+    const nextH = Math.min(el.scrollHeight, maxH);
+    el.style.height = nextH + 'px';
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+  }
+
   submitCurrentInput() {
     if (!this.inputElement) return;
     const val = this.inputElement.value;
     this.inputElement.value = '';
+    this.resizeInput();
     this.historyIndex = -1;
     this.executeCommand(val);
     this.hideChips();
@@ -91,6 +185,7 @@ class TerminalUI {
   runCommandProgrammatically(cmdLine) {
     if (this.inputElement) {
       this.inputElement.value = '';
+      this.resizeInput();
     }
     this.historyIndex = -1;
     this.executeCommand(cmdLine);
@@ -216,6 +311,7 @@ class TerminalUI {
 
       if (e.key === 'Enter') {
         e.preventDefault();
+        this.suppressEnterOnce();
         const toExec = this.reverseSearchMatch || this.reverseSearchQuery;
         this.isReverseSearch = false;
         this.updatePrompt();
@@ -396,23 +492,41 @@ class TerminalUI {
 
     // Atalho 'n' / 'N' com input vazio para avançar após conclusão da lição (estilo 'next' do Linux)
     if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      if (this.inputElement && this.inputElement.value === '' && typeof this.onNextRequested === 'function') {
+      if (this.inputElement && this.inputElement.value.trim() === '' && typeof this.onNextRequested === 'function') {
         if (this.onNextRequested()) {
           e.preventDefault();
+          e.stopPropagation();
+          this.suppressCharOnce('n');
+          this.inputElement.value = '';
+          this.resizeInput();
           return;
         }
       }
     }
 
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      this.suppressEnterOnce();
       this.submitCurrentInput();
+    } else if (e.key === 'Enter' && e.shiftKey) {
+      this.clearSuppressedEnter();
+      setTimeout(() => this.resizeInput(), 0);
     } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      this.navigateHistory(-1);
+      const val = this.inputElement ? this.inputElement.value : '';
+      const pos = this.inputElement ? (this.inputElement.selectionStart ?? 0) : 0;
+      if (!val.includes('\n') || val.lastIndexOf('\n', pos - 1) === -1) {
+        e.preventDefault();
+        this.navigateHistory(-1);
+        this.resizeInput();
+      }
     } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      this.navigateHistory(1);
+      const val = this.inputElement ? this.inputElement.value : '';
+      const pos = this.inputElement ? (this.inputElement.selectionStart ?? val.length) : 0;
+      if (!val.includes('\n') || val.indexOf('\n', pos) === -1) {
+        e.preventDefault();
+        this.navigateHistory(1);
+        this.resizeInput();
+      }
     } else if (e.key === 'Tab') {
       e.preventDefault();
       this.triggerTabCompletion();
@@ -453,7 +567,8 @@ class TerminalUI {
     }
 
     const promptText = this.promptElement ? this.promptElement.textContent : 'penguin@gym:~$ ';
-    this.writeLine(`<span class="output-prompt">${this.escapeHtml(promptText)}</span><span class="output-cmd">${this.escapeHtml(cmdLine)}</span>`);
+    const renderedCmd = this.escapeHtml(cmdLine).replace(/\n/g, '<br>');
+    this.writeLine(`<span class="output-prompt">${this.escapeHtml(promptText)}</span><span class="output-cmd">${renderedCmd}</span>`);
 
     if (!trimmed) {
       this.scrollToBottom();
@@ -536,7 +651,10 @@ class TerminalUI {
     }
 
     if (res.action === 'nano') {
-      this.openNanoEditor(res.filePath || 'untitled.txt', { crontabMode: !!res.crontabMode });
+      this.openNanoEditor(res.filePath || 'untitled.txt', {
+        crontabMode: !!res.crontabMode,
+        editorMode: res.editorMode || 'nano'
+      });
       if (this.onCommandExecuted) {
         this.onCommandExecuted(cmdLine, '', this.fs, res);
       }
@@ -572,7 +690,8 @@ class TerminalUI {
    * Abre o editor interativo GNU nano sobre o terminal integrado ao VirtualFS
    */
   openNanoEditor(filePath, options = {}) {
-    const { crontabMode = false } = options;
+    const { crontabMode = false, editorMode = 'nano' } = options;
+    const isVimAlias = editorMode === 'vim' || editorMode === 'vi';
     const termArea = document.getElementById('terminalArea');
     if (!termArea) return;
 
@@ -595,6 +714,10 @@ class TerminalUI {
     let lastSavedContent = initialContent;
     let confirmingExit = false;
     const lineCount = initialContent ? initialContent.split('\n').length : 0;
+    const headerLabel = isVimAlias ? `  ${editorMode.toUpperCase()} (modo rápido compatível com nano)` : '  GNU nano 7.2';
+    const initialStatus = isVimAlias
+      ? `[ Modo vim simplificado (${lineCount} linhas) — use ^O gravar / ^X sair ]`
+      : `[ Lidas ${lineCount} linhas ]`;
 
     const overlay = document.createElement('div');
     overlay.id = 'nanoEditorOverlay';
@@ -602,13 +725,13 @@ class TerminalUI {
     overlay.tabIndex = -1;
     overlay.innerHTML = `
       <div class="nano-header">
-        <span>  GNU nano 7.2</span>
+        <span>${headerLabel}</span>
         <span class="nano-filename">Arquivo: ${this.escapeHtml(filePath)}</span>
         <span class="nano-modified" id="nanoModifiedIndicator"></span>
       </div>
       <textarea id="nanoTextarea" class="nano-textarea" spellcheck="false" placeholder="Digite o conteúdo do arquivo aqui..."></textarea>
       <div class="nano-status-bar" id="nanoStatusBar">
-        <span id="nanoStatusMsg">[ Lidas ${lineCount} linhas ]</span>
+        <span id="nanoStatusMsg">${initialStatus}</span>
       </div>
       <div class="nano-footer" id="nanoFooterNormal">
         <button type="button" class="nano-shortcut" id="nanoSaveBtn"><span class="nano-key">^O</span> Gravar</button>
@@ -694,7 +817,9 @@ class TerminalUI {
         this._nanoKeyCleanup = null;
       }
       overlay.remove();
-      if (this.inputElement) this.inputElement.focus();
+      const focusBack = () => { if (this.inputElement) this.inputElement.focus(); };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusBack);
+      else setTimeout(focusBack, 0);
     };
 
     const requestExit = () => {
@@ -844,7 +969,7 @@ class TerminalUI {
 
     const lines = (content || '').split('\n');
     let currentLine = 0;
-    const linesPerPage = 20;
+    let linesPerPage = 16;
     let searchTerm = '';
     const isMore = pagerMode === 'more';
 
@@ -854,9 +979,14 @@ class TerminalUI {
     overlay.tabIndex = 0;
     overlay.innerHTML = `
       <div class="less-body" id="lessBody"></div>
+      <form class="less-search-bar d-none" id="lessSearchForm">
+        <span class="less-search-slash">/</span>
+        <input type="text" class="less-search-input" id="lessSearchInput" placeholder="Buscar no arquivo (Enter) ou Esc para cancelar..." autocomplete="off">
+      </form>
       <div class="less-footer">
         <span class="less-status" id="lessStatus"></span>
         <div class="less-controls">
+          ${!isMore ? '<button type="button" class="less-btn" id="lessSearchBtn" title="Buscar (/)">🔍 /</button>' : ''}
           <button type="button" class="less-btn" id="lessUpBtn">▲ Linha</button>
           <button type="button" class="less-btn" id="lessDownBtn">▼ Linha</button>
           <button type="button" class="less-btn" id="lessPgUpBtn">▲ Pág</button>
@@ -870,13 +1000,30 @@ class TerminalUI {
 
     const bodyEl = overlay.querySelector('#lessBody');
     const statusEl = overlay.querySelector('#lessStatus');
+    const searchForm = overlay.querySelector('#lessSearchForm');
+    const searchInput = overlay.querySelector('#lessSearchInput');
+    const searchBtn = overlay.querySelector('#lessSearchBtn');
     const upBtn = overlay.querySelector('#lessUpBtn');
     const downBtn = overlay.querySelector('#lessDownBtn');
     const pgUpBtn = overlay.querySelector('#lessPgUpBtn');
     const pgDnBtn = overlay.querySelector('#lessPgDnBtn');
     const exitBtn = overlay.querySelector('#lessExitBtn');
 
+    const computeLinesPerPage = () => {
+      if (!bodyEl || typeof window === 'undefined') return 16;
+      const styles = window.getComputedStyle(bodyEl);
+      const lineH = parseFloat(styles.lineHeight) || 21.8;
+      const padTop = parseFloat(styles.paddingTop) || 12;
+      const padBottom = parseFloat(styles.paddingBottom) || 12;
+      const avail = Math.max(80, (bodyEl.clientHeight || 340) - padTop - padBottom);
+      linesPerPage = Math.max(4, Math.floor(avail / lineH));
+      return linesPerPage;
+    };
+
     const render = () => {
+      computeLinesPerPage();
+      const maxStart = Math.max(0, lines.length - linesPerPage);
+      if (currentLine > maxStart) currentLine = maxStart;
       const visible = lines.slice(currentLine, currentLine + linesPerPage);
       bodyEl.innerHTML = visible.map(l => {
         const safe = this.escapeHtml(l);
@@ -892,14 +1039,33 @@ class TerminalUI {
           : `--Mais--(${pct}%) [Espaço: próxima página | q: sair]`;
       } else {
         statusEl.textContent = isEnd
-          ? `${title} (END - pressione q para sair | / para buscar)`
+          ? `${title} (END - q sair | / buscar)`
           : `${title} (linhas ${currentLine + 1}-${Math.min(lines.length, currentLine + linesPerPage)} de ${lines.length} - q sair, / buscar)`;
       }
     };
 
+    const openInlineSearch = () => {
+      if (isMore || !searchForm || !searchInput) return;
+      searchForm.classList.remove('d-none');
+      searchInput.value = searchTerm;
+      searchInput.focus();
+      searchInput.select();
+    };
+
+    const closeInlineSearch = () => {
+      if (searchForm) searchForm.classList.add('d-none');
+      overlay.focus();
+    };
+
+    const onResize = () => render();
+    if (typeof window !== 'undefined') window.addEventListener('resize', onResize);
+
     const closePager = () => {
+      if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
       overlay.remove();
-      if (this.inputElement) this.inputElement.focus();
+      const focusBack = () => { if (this.inputElement) this.inputElement.focus(); };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusBack);
+      else setTimeout(focusBack, 0);
     };
 
     if (isMore) {
@@ -907,24 +1073,43 @@ class TerminalUI {
       pgUpBtn.style.display = 'none';
     }
 
+    if (searchForm && searchInput) {
+      searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        searchTerm = searchInput.value.trim();
+        if (searchTerm) {
+          const startFrom = currentLine + 1 < lines.length ? currentLine + 1 : 0;
+          let matchIdx = lines.findIndex((l, idx) => idx >= startFrom && l.toLowerCase().includes(searchTerm.toLowerCase()));
+          if (matchIdx === -1) {
+            matchIdx = lines.findIndex(l => l.toLowerCase().includes(searchTerm.toLowerCase()));
+          }
+          if (matchIdx !== -1) currentLine = matchIdx;
+        }
+        closeInlineSearch();
+        render();
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeInlineSearch();
+        }
+      });
+    }
+
+    if (searchBtn) searchBtn.addEventListener('click', () => openInlineSearch());
+
     overlay.addEventListener('keydown', (e) => {
+      if (searchForm && !searchForm.classList.contains('d-none')) return;
       const k = e.key.toLowerCase();
       if (k === 'q' || e.key === 'Escape' || (e.ctrlKey && k === 'c')) {
         e.preventDefault();
+        e.stopPropagation();
+        if (k === 'q') this.suppressCharOnce('q');
         closePager();
       } else if (!isMore && e.key === '/') {
         e.preventDefault();
-        const term = typeof window !== 'undefined' && typeof window.prompt === 'function'
-          ? window.prompt('Buscar no texto (less /):', searchTerm)
-          : '';
-        if (term !== null) {
-          searchTerm = term.trim();
-          if (searchTerm) {
-            const matchIdx = lines.findIndex(l => l.toLowerCase().includes(searchTerm.toLowerCase()));
-            if (matchIdx !== -1) currentLine = matchIdx;
-          }
-          render();
-        }
+        openInlineSearch();
       } else if (k === 'j' || e.key === 'ArrowDown' || (isMore && e.key === 'Enter')) {
         e.preventDefault();
         if (currentLine + 1 < lines.length) {
@@ -981,29 +1166,19 @@ class TerminalUI {
     return prefix;
   }
 
-  triggerTabCompletion() {
-    if (!this.inputElement) return;
-    const val = this.inputElement.value;
-
-    if (val === this.lastTabInput) {
-      this.tabPressCount++;
-    } else {
-      this.tabPressCount = 1;
-      this.lastTabInput = val;
-    }
-
-    // Identifica o segmento do comando ativo após o último ;, &&, || ou | fora de aspas
+  parseCompletionContext(val) {
     let lastSepEnd = 0;
     let inQ = null;
     for (let i = 0; i < val.length; i++) {
       const ch = val[i];
+      if (ch === '\\' && i + 1 < val.length && inQ !== "'") { i++; continue; }
       if (ch === "'" || ch === '"') {
         inQ = inQ === ch ? null : (inQ || ch);
       } else if (!inQ) {
         if ((ch === '&' && val[i + 1] === '&') || (ch === '|' && val[i + 1] === '|')) {
           lastSepEnd = i + 2;
           i++;
-        } else if (ch === ';' || ch === '|') {
+        } else if (ch === ';' || ch === '|' || ch === '\n') {
           lastSepEnd = i + 1;
         }
       }
@@ -1015,8 +1190,64 @@ class TerminalUI {
     const segPrefix = linePrefix + (leadMatch ? leadMatch[1] : '');
     const activeSeg = rawSeg.slice(leadMatch ? leadMatch[1].length : 0);
 
-    const tokens = activeSeg.split(/\s+/);
-    const lastToken = tokens[tokens.length - 1] || '';
+    // Tokeniza respeitando aspas e preservando intervalo do último token
+    const tokens = [];
+    let q = null;
+    let tokStart = null;
+    for (let i = 0; i < activeSeg.length; i++) {
+      const ch = activeSeg[i];
+      if (ch === '\\' && i + 1 < activeSeg.length && q !== "'") {
+        if (tokStart === null) tokStart = i;
+        i++;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        if (tokStart === null) tokStart = i;
+        q = q === ch ? null : (q || ch);
+        continue;
+      }
+      if (/\s/.test(ch) && !q) {
+        if (tokStart !== null) {
+          tokens.push({ raw: activeSeg.slice(tokStart, i), start: tokStart, end: i });
+          tokStart = null;
+        }
+        continue;
+      }
+      if (tokStart === null) tokStart = i;
+    }
+    const endsWithSpace = activeSeg.length > 0 && /\s/.test(activeSeg[activeSeg.length - 1]) && !q;
+    if (tokStart !== null) {
+      tokens.push({ raw: activeSeg.slice(tokStart), start: tokStart, end: activeSeg.length });
+    } else if (endsWithSpace || tokens.length === 0) {
+      tokens.push({ raw: '', start: activeSeg.length, end: activeSeg.length });
+    }
+
+    const rawLast = tokens[tokens.length - 1].raw;
+    const quoteChar = (rawLast.startsWith('"') || rawLast.startsWith("'")) ? rawLast[0] : '';
+    const unquotedLast = quoteChar ? rawLast.slice(1).replace(new RegExp(`${quoteChar}$`), '') : rawLast;
+    const prefixBeforeLast = segPrefix + activeSeg.slice(0, tokens[tokens.length - 1].start);
+
+    return {
+      segPrefix,
+      prefixBeforeLast,
+      tokenValues: tokens.map(t => t.raw.replace(/^["']|["']$/g, '')),
+      lastToken: unquotedLast,
+      quoteChar
+    };
+  }
+
+  triggerTabCompletion() {
+    if (!this.inputElement) return;
+    const val = this.inputElement.value;
+
+    if (val === this.lastTabInput) {
+      this.tabPressCount++;
+    } else {
+      this.tabPressCount = 1;
+      this.lastTabInput = val;
+    }
+
+    const { prefixBeforeLast, tokenValues, lastToken, quoteChar } = this.parseCompletionContext(val);
 
     // 1. Autocompletar variáveis ($VAR)
     if (lastToken.startsWith('$') && !lastToken.startsWith('$(')) {
@@ -1029,49 +1260,54 @@ class TerminalUI {
         ])
       ).sort();
       const matches = varPool.filter(v => v.startsWith(varPrefix)).map(v => '$' + v);
-      this.applyTabMatches(tokens, lastToken, '', matches, true, segPrefix);
+      this.applyTabMatches(prefixBeforeLast, lastToken, '', matches, true, quoteChar);
       return;
     }
 
     // Desembrulha prefixo sudo para autocompletar comandos e subcomandos mesmo com sudo
     let effStart = 0;
-    if (tokens.length > 1 && tokens[0] === 'sudo') {
+    if (tokenValues.length > 1 && tokenValues[0] === 'sudo') {
       effStart = 1;
-      while (effStart < tokens.length - 1 && tokens[effStart].startsWith('-')) {
-        if ((tokens[effStart] === '-u' || tokens[effStart] === '-g') && effStart + 1 < tokens.length - 1) {
+      while (effStart < tokenValues.length - 1 && tokenValues[effStart].startsWith('-')) {
+        if ((tokenValues[effStart] === '-u' || tokenValues[effStart] === '-g') && effStart + 1 < tokenValues.length - 1) {
           effStart += 2;
         } else {
           effStart += 1;
         }
       }
     }
-    const effTokens = tokens.slice(effStart);
+    const effTokens = tokenValues.slice(effStart);
 
     // 2. Autocompletar comandos / builtins / aliases no primeiro token efetivo
     if (effTokens.length <= 1 && !lastToken.includes('/')) {
       const baseCommands = [
-        'pwd', 'ls', 'cd', 'mkdir', 'touch', 'cat', 'echo', 'printf', 'cp', 'mv', 'rm', 'rmdir',
-        'grep', 'find', 'head', 'tail', 'cut', 'tr', 'sort', 'uniq', 'wc', 'chmod', 'umask',
-        'chown', 'sudo', 'which', 'whoami', 'date', 'clear', 'help', 'ps', 'top', 'htop',
-        'kill', 'pkill', 'killall', 'pgrep', 'jobs', 'df', 'du', 'free', 'lscpu', 'lsblk', 'dmesg',
-        'git', 'docker', 'sqlite3', 'tar', 'gzip', 'gunzip', 'zcat', 'zip', 'unzip', 'ln',
-        'diff', 'env', 'printenv', 'export', 'unset', 'alias', 'unalias', 'history', 'uname',
-        'uptime', 'more', 'less', 'sed', 'awk', 'xargs', 'tee', 'tac', 'rev', 'nl', 'paste',
-        'column', 'md5sum', 'sha256sum', 'base64', 'stat', 'file', 'tree', 'realpath',
-        'readlink', 'basename', 'dirname', 'pushd', 'popd', 'dirs', 'man', 'whatis', 'apropos',
-        'id', 'groups', 'who', 'w', 'last', 'hostname', 'hostnamectl', 'useradd', 'usermod',
-        'userdel', 'groupadd', 'passwd', 'systemctl', 'service', 'journalctl', 'crontab', 'apt',
-        'apt-get', 'dpkg', 'ip', 'ifconfig', 'ping', 'traceroute', 'curl', 'wget', 'ss',
-        'netstat', 'dig', 'nslookup', 'host', 'nc', 'netcat', 'ufw', 'ssh', 'ssh-keygen', 'scp', 'rsync',
-        'ansible', 'ansible-playbook', 'logger', 'sleep',
-        'nano', 'vi', 'vim', 'neofetch', 'cowsay', 'jq', 'nmap', 'source', 'bash', 'sh', 'test',
-        'expr', 'seq', 'true', 'false', 'nohup', 'command', 'builtin', 'reset-fs', 'clean-env',
-        'exit', 'logout'
+        'adduser', 'alias', 'ansible', 'ansible-playbook', 'apropos', 'apt', 'apt-get', 'at', 'awk',
+        'base64', 'basename', 'bash', 'bc', 'bg', 'blkid', 'builtin',
+        'cat', 'cd', 'chmod', 'chown', 'cksum', 'clean-env', 'clear', 'column', 'command', 'cowsay', 'cp', 'crontab', 'curl', 'cut',
+        'date', 'df', 'diff', 'dig', 'dirname', 'dirs', 'dmesg', 'docker', 'dpkg', 'du',
+        'echo', 'env', 'exit', 'export', 'expr',
+        'false', 'fdisk', 'fg', 'file', 'find', 'for', 'free',
+        'getent', 'git', 'grep', 'groupadd', 'groups', 'gunzip', 'gzip',
+        'head', 'help', 'history', 'host', 'hostname', 'hostnamectl', 'htop',
+        'id', 'if', 'ifconfig', 'ip', 'iptables',
+        'jobs', 'journalctl', 'jq',
+        'kill', 'killall',
+        'last', 'less', 'let', 'ln', 'logger', 'logout', 'ls', 'lsblk', 'lscpu', 'lsof',
+        'man', 'md5sum', 'mkdir', 'more', 'mount', 'mv',
+        'nano', 'nc', 'neofetch', 'netcat', 'netstat', 'nftables', 'nl', 'nmap', 'nohup', 'nslookup',
+        'passwd', 'paste', 'pgrep', 'ping', 'pkill', 'popd', 'printenv', 'printf', 'ps', 'pushd', 'pwd',
+        'readlink', 'realpath', 'reboot', 'reset-fs', 'rev', 'rm', 'rmdir', 'route', 'rsync',
+        'scp', 'sed', 'seq', 'service', 'sh', 'sha256sum', 'shutdown', 'sleep', 'sort', 'source', 'sqlite3', 'ss', 'ssh', 'ssh-keygen', 'stat', 'su', 'sudo', 'systemctl',
+        'tac', 'tail', 'tar', 'tee', 'telnet', 'test', 'top', 'touch', 'tr', 'tracepath', 'traceroute', 'tree', 'true', 'type',
+        'ufw', 'umask', 'umount', 'unalias', 'uname', 'uniq', 'unset', 'until', 'unzip', 'uptime', 'useradd', 'userdel', 'usermod',
+        'vi', 'vim', 'vmstat',
+        'w', 'wc', 'wget', 'whatis', 'which', 'while', 'who', 'whoami',
+        'xargs', 'zcat', 'zip'
       ];
       const aliasNames = Object.keys((this.commandEngine && this.commandEngine.aliases) || {});
       const allCmds = Array.from(new Set([...baseCommands, ...aliasNames])).sort();
       const matches = allCmds.filter(c => c.startsWith(lastToken));
-      this.applyTabMatches(tokens, lastToken, '', matches, true, segPrefix);
+      this.applyTabMatches(prefixBeforeLast, lastToken, '', matches, true, quoteChar);
       return;
     }
 
@@ -1129,7 +1365,7 @@ class TerminalUI {
     if (contextPool && contextPool.length > 0) {
       const matches = contextPool.filter(c => c.startsWith(lastToken));
       if (matches.length > 0) {
-        this.applyTabMatches(tokens, lastToken, '', matches, true, segPrefix);
+        this.applyTabMatches(prefixBeforeLast, lastToken, '', matches, true, quoteChar);
         return;
       }
     }
@@ -1138,17 +1374,26 @@ class TerminalUI {
     const matches = this.fs.getCompletions(lastToken);
     const dirPrefix = lastToken.includes('/') ? lastToken.slice(0, lastToken.lastIndexOf('/') + 1) : '';
     const partialName = lastToken.includes('/') ? lastToken.slice(lastToken.lastIndexOf('/') + 1) : lastToken;
-    this.applyTabMatches(tokens, partialName, dirPrefix, matches, false, segPrefix);
+    this.applyTabMatches(prefixBeforeLast, partialName, dirPrefix, matches, false, quoteChar);
   }
 
-  applyTabMatches(tokens, partialName, dirPrefix, matches, isCommandOrVar, segPrefix = '') {
+  applyTabMatches(prefixBeforeLast, partialName, dirPrefix, matches, isCommandOrVar, quoteChar = '') {
     if (!matches || matches.length === 0) return;
 
+    const formatChoice = (choice, isSingle) => {
+      const raw = dirPrefix + choice;
+      const isDir = choice.endsWith('/');
+      if (quoteChar) {
+        return isDir ? `${quoteChar}${raw}` : `${quoteChar}${raw}${quoteChar}${isSingle ? ' ' : ''}`;
+      }
+      return raw.includes(' ')
+        ? `"${raw}${isDir ? '' : `"${isSingle ? ' ' : ''}`}`
+        : `${raw}${!isDir && isSingle ? ' ' : ''}`;
+    };
+
     if (matches.length === 1) {
-      const match = matches[0];
-      const isDir = match.endsWith('/');
-      tokens[tokens.length - 1] = dirPrefix + match;
-      this.inputElement.value = segPrefix + tokens.join(' ') + (isDir ? '' : ' ');
+      this.inputElement.value = prefixBeforeLast + formatChoice(matches[0], true);
+      this.resizeInput();
       this.lastTabInput = this.inputElement.value;
       this.tabPressCount = 0;
       this.hideChips();
@@ -1158,8 +1403,8 @@ class TerminalUI {
     // Múltiplas opções: verifica se há um prefixo comum maior que o digitado
     const common = this.getLongestCommonPrefix(matches);
     if (common && common.length > partialName.length) {
-      tokens[tokens.length - 1] = dirPrefix + common;
-      this.inputElement.value = segPrefix + tokens.join(' ');
+      this.inputElement.value = prefixBeforeLast + quoteChar + dirPrefix + common;
+      this.resizeInput();
       this.lastTabInput = this.inputElement.value;
       this.tabPressCount = 1;
     } else if (this.tabPressCount >= 2) {
@@ -1173,9 +1418,8 @@ class TerminalUI {
     }
 
     this.showChips(matches, (choice) => {
-      const isDir = choice.endsWith('/');
-      tokens[tokens.length - 1] = dirPrefix + choice;
-      this.inputElement.value = segPrefix + tokens.join(' ') + (isDir ? '' : ' ');
+      this.inputElement.value = prefixBeforeLast + formatChoice(choice, true);
+      this.resizeInput();
       this.lastTabInput = this.inputElement.value;
       this.tabPressCount = 0;
       this.inputElement.focus();
@@ -1183,20 +1427,23 @@ class TerminalUI {
   }
 
   updateCompletionChips() {
-    const val = this.inputElement.value.trim();
-    if (!val) {
+    const raw = this.inputElement.value;
+    if (!raw.trim() || raw.includes('\n')) {
       this.hideChips();
       return;
     }
-    const tokens = val.split(/\s+/);
-    const last = tokens[tokens.length - 1];
-    if (tokens.length > 1 && last) {
-      const matches = this.fs.getCompletions(last);
+    const { prefixBeforeLast, tokenValues, lastToken, quoteChar } = this.parseCompletionContext(raw);
+    if (tokenValues.length > 1 && lastToken !== undefined) {
+      const dirPrefix = lastToken.includes('/') ? lastToken.slice(0, lastToken.lastIndexOf('/') + 1) : '';
+      const matches = this.fs.getCompletions(lastToken);
       if (matches.length > 0 && matches.length <= 6) {
         this.showChips(matches, (choice) => {
-          const prefix = last.includes('/') ? last.slice(0, last.lastIndexOf('/') + 1) : '';
-          tokens[tokens.length - 1] = prefix + choice;
-          this.inputElement.value = tokens.join(' ');
+          const isDir = choice.endsWith('/');
+          const completed = dirPrefix + choice;
+          const formatted = quoteChar
+            ? `${quoteChar}${completed}${isDir ? '' : quoteChar + ' '}`
+            : (completed.includes(' ') ? `"${completed}${isDir ? '' : '" '}` : `${completed}${isDir ? '' : ' '}`);
+          this.inputElement.value = prefixBeforeLast + formatted;
           this.inputElement.focus();
         });
         return;

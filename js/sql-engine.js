@@ -242,33 +242,43 @@ class SQLEngine {
     return parts.filter(Boolean);
   }
 
-  resolveColVal(row, colRef) {
-    const clean = colRef.trim();
-    if (Object.prototype.hasOwnProperty.call(row, clean)) return row[clean];
-    const lower = clean.toLowerCase();
-    for (const k of Object.keys(row)) {
-      if (k.toLowerCase() === lower) return row[k];
-    }
-    if (!clean.includes('.')) {
-      for (const k of Object.keys(row)) {
-        const dotIdx = k.indexOf('.');
-        if (dotIdx !== -1 && k.slice(dotIdx + 1).toLowerCase() === lower) {
-          return row[k];
+  resolveColVal(row, colRef, outerRow = null) {
+    const lookup = (r, clean) => {
+      if (!r) return undefined;
+      if (Object.prototype.hasOwnProperty.call(r, clean)) return r[clean];
+      const lower = clean.toLowerCase();
+      for (const k of Object.keys(r)) {
+        if (k.toLowerCase() === lower) return r[k];
+      }
+      if (!clean.includes('.')) {
+        for (const k of Object.keys(r)) {
+          const dotIdx = k.indexOf('.');
+          if (dotIdx !== -1 && k.slice(dotIdx + 1).toLowerCase() === lower) {
+            return r[k];
+          }
         }
       }
-    }
+      return undefined;
+    };
+    const clean = colRef.trim();
+    const val = lookup(row, clean);
+    if (val !== undefined) return val;
+    if (outerRow) return lookup(outerRow, clean);
     return undefined;
   }
 
-  hasColumn(rowOrCols, colRef) {
+  hasColumn(rowOrCols, colRef, outerRow = null) {
     const clean = colRef.trim().toLowerCase();
     if (Array.isArray(rowOrCols)) {
-      return rowOrCols.some(c => c.toLowerCase() === clean || c.toLowerCase().endsWith('.' + clean));
+      if (rowOrCols.some(c => c.toLowerCase() === clean || c.toLowerCase().endsWith('.' + clean))) {
+        return true;
+      }
+      return outerRow ? this.hasColumn(outerRow, colRef) : false;
     }
-    return this.resolveColVal(rowOrCols, colRef) !== undefined;
+    return this.resolveColVal(rowOrCols, colRef, outerRow) !== undefined;
   }
 
-  evalWhere(expr, row, dbKey) {
+  evalWhere(expr, row, dbKey, outerRow = null) {
     if (!expr || !expr.trim()) return true;
     let trimmed = expr.trim();
     while (trimmed.startsWith('(') && trimmed.endsWith(')')) {
@@ -292,7 +302,7 @@ class SQLEngine {
 
     const orParts = this.splitOutsideQuotes(trimmed, /^OR(?=\s|\()/i);
     if (orParts.length > 1) {
-      return orParts.some(p => this.evalWhere(p, row, dbKey));
+      return orParts.some(p => this.evalWhere(p, row, dbKey, outerRow));
     }
 
     // Avoid splitting BETWEEN a AND b
@@ -326,33 +336,34 @@ class SQLEngine {
       andParts.push(trimmed.slice(lastIdx).trim());
     }
     if (andParts.length > 1) {
-      return andParts.every(p => this.evalWhere(p, row, dbKey));
+      return andParts.every(p => this.evalWhere(p, row, dbKey, outerRow));
     }
 
     if (/^NOT\s+/i.test(trimmed)) {
-      return !this.evalWhere(trimmed.slice(4), row, dbKey);
+      return !this.evalWhere(trimmed.slice(4), row, dbKey, outerRow);
     }
 
     // IS [NOT] NULL
     const isNullMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+IS\s+(NOT\s+)?NULL$/i);
     if (isNullMatch) {
-      const val = this.resolveColVal(row, isNullMatch[1]);
+      const val = this.resolveColVal(row, isNullMatch[1], outerRow);
       const isNull = val === null || val === undefined || val === '';
       return isNullMatch[2] ? !isNull : isNull;
     }
 
-    // NOT EXISTS (subquery)
+    // [NOT] EXISTS (subquery) with correlated outerRow context
     const existsMatch = trimmed.match(/^(NOT\s+)?EXISTS\s*\((SELECT\s+.+)\)$/is);
     if (existsMatch) {
-      const subRes = this.runSelect(existsMatch[2], dbKey, false, true);
-      const hasAny = subRes && subRes.rows && subRes.rows.length > 0;
+      const mergedOuter = outerRow ? { ...outerRow, ...row } : row;
+      const subRes = this.runSelect(existsMatch[2], dbKey, false, true, false, mergedOuter);
+      const hasAny = Boolean(subRes && subRes.rows && subRes.rows.length > 0);
       return existsMatch[1] ? !hasAny : hasAny;
     }
 
     // BETWEEN
     const betweenMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+(NOT\s+)?BETWEEN\s+(.+?)\s+AND\s+(.+)$/is);
     if (betweenMatch) {
-      const val = this.resolveColVal(row, betweenMatch[1]);
+      const val = this.resolveColVal(row, betweenMatch[1], outerRow);
       if (val === null || val === undefined) return false;
       const minV = this.parseLiteral(betweenMatch[3]);
       const maxV = this.parseLiteral(betweenMatch[4]);
@@ -363,12 +374,13 @@ class SQLEngine {
     // [NOT] IN (...)
     const inMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+(NOT\s+)?IN\s*\((.+)\)$/is);
     if (inMatch) {
-      const val = this.resolveColVal(row, inMatch[1]);
+      const val = this.resolveColVal(row, inMatch[1], outerRow);
       if (val === null || val === undefined) return false;
       const inner = inMatch[3].trim();
       let candidates;
       if (/^SELECT\s+/i.test(inner)) {
-        const subRes = this.runSelect(inner, dbKey, false, true);
+        const mergedOuter = outerRow ? { ...outerRow, ...row } : row;
+        const subRes = this.runSelect(inner, dbKey, false, true, false, mergedOuter);
         candidates = (subRes && subRes.rows ? subRes.rows : []).map(r => Object.values(r)[0]);
       } else {
         candidates = this.splitTopLevel(inner, ',').map(v => this.parseLiteral(v));
@@ -380,7 +392,7 @@ class SQLEngine {
     // [NOT] LIKE
     const likeMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s+(NOT\s+)?LIKE\s+(['"].*['"])$/is);
     if (likeMatch) {
-      const val = this.resolveColVal(row, likeMatch[1]);
+      const val = this.resolveColVal(row, likeMatch[1], outerRow);
       if (val === null || val === undefined) return false;
       const pattern = String(this.parseLiteral(likeMatch[3]));
       const regexStr = '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$';
@@ -388,14 +400,14 @@ class SQLEngine {
       return likeMatch[2] ? !matched : matched;
     }
 
-    // Binary comparison: col op val (where val can be another column or literal)
+    // Binary comparison: col op val (where val can be another column, outer column, or literal)
     const cmpMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*(=|!=|<>|>=|<=|>|<)\s*(.+)$/s);
     if (cmpMatch) {
-      const left = this.resolveColVal(row, cmpMatch[1]);
+      const left = this.resolveColVal(row, cmpMatch[1], outerRow);
       const op = cmpMatch[2];
       const rightRaw = cmpMatch[3].trim();
-      const isColRef = /^[A-Za-z_][A-Za-z0-9_.]*$/.test(rightRaw) && !/^NULL$/i.test(rightRaw) && this.hasColumn(row, rightRaw);
-      const right = isColRef ? this.resolveColVal(row, rightRaw) : this.parseLiteral(rightRaw);
+      const isColRef = /^[A-Za-z_][A-Za-z0-9_.]*$/.test(rightRaw) && !/^NULL$/i.test(rightRaw) && this.hasColumn(row, rightRaw, outerRow);
+      const right = isColRef ? this.resolveColVal(row, rightRaw, outerRow) : this.parseLiteral(rightRaw);
 
       // SQL NULL comparison with = / != is always unknown (false)
       if (left === null || left === undefined || right === null || right === undefined) {
@@ -417,23 +429,43 @@ class SQLEngine {
     throw new Error(`near "${trimmed.split(/\s+/)[0]}": syntax error`);
   }
 
-  evalSelectExpr(expr, rowsForGroup, allColNames) {
+  evalSelectExpr(expr, rowsForGroup, allColNames, outerRow = null) {
     const clean = expr.trim().replace(/\s+AS\s+\w+$/i, '').trim();
-    const aggMatch = clean.match(/^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(\*|[A-Za-z_][A-Za-z0-9_.]*)\s*\)$/i);
+
+    if (/^-?\d+(\.\d+)?$/.test(clean) || /^(['"]).*\1$/.test(clean)) {
+      return this.parseLiteral(clean);
+    }
+
+    const roundMatch = clean.match(/^ROUND\s*\(\s*(.+?)(?:\s*,\s*(-?\d+))?\s*\)$/i);
+    if (roundMatch) {
+      const innerVal = this.evalSelectExpr(roundMatch[1], rowsForGroup, allColNames, outerRow);
+      if (innerVal === null || innerVal === undefined || Number.isNaN(Number(innerVal))) return null;
+      const digits = roundMatch[2] !== undefined ? Math.max(0, parseInt(roundMatch[2], 10)) : 0;
+      const factor = Math.pow(10, digits);
+      return Number((Math.round(Number(innerVal) * factor) / factor).toFixed(digits));
+    }
+
+    const aggMatch = clean.match(/^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(.+?)\s*\)$/i);
     if (aggMatch) {
       const fn = aggMatch[1].toUpperCase();
-      const target = aggMatch[2];
+      const targetRaw = aggMatch[2].trim();
+      const distinctMatch = targetRaw.match(/^DISTINCT\s+([A-Za-z_][A-Za-z0-9_.]*)$/i);
+      const target = distinctMatch ? distinctMatch[1] : targetRaw;
+
       if (fn === 'COUNT') {
-        if (target === '*') return rowsForGroup.length;
-        return rowsForGroup.filter(r => {
-          const v = this.resolveColVal(r, target);
-          return v !== null && v !== undefined && v !== '';
-        }).length;
+        if (/^(?:\*|-?\d+|'[^']*'|"[^"]*")$/.test(target)) return rowsForGroup.length;
+        const validVals = rowsForGroup
+          .map(r => this.resolveColVal(r, target, outerRow))
+          .filter(v => v !== null && v !== undefined && v !== '');
+        if (distinctMatch) return new Set(validVals.map(v => String(v))).size;
+        return validVals.length;
       }
-      const nums = rowsForGroup
-        .map(r => this.resolveColVal(r, target))
+
+      let nums = rowsForGroup
+        .map(r => this.resolveColVal(r, target, outerRow))
         .filter(v => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v)))
         .map(Number);
+      if (distinctMatch) nums = Array.from(new Set(nums));
       if (nums.length === 0) return null;
       if (fn === 'SUM') return nums.reduce((a, b) => a + b, 0);
       if (fn === 'AVG') {
@@ -443,17 +475,52 @@ class SQLEngine {
       if (fn === 'MIN') return Math.min(...nums);
       if (fn === 'MAX') return Math.max(...nums);
     }
+
     const row = rowsForGroup[0] || {};
-    if (!this.hasColumn(allColNames, clean)) {
+    if (!this.hasColumn(allColNames, clean, outerRow)) {
       throw new Error(`no such column: ${clean}`);
     }
-    return this.resolveColVal(row, clean);
+    return this.resolveColVal(row, clean, outerRow);
   }
 
-  runSelect(rawQuery, dbKey, isCsv, returnRaw = false) {
+  evalHavingExpr(expr, gRows, allColNames, aliasMap, outerRow = null) {
+    const trimmed = (expr || '').trim();
+    if (!trimmed) return true;
+    const orParts = this.splitOutsideQuotes(trimmed, /^OR(?=\s|\()/i);
+    if (orParts.length > 1) {
+      return orParts.some(p => this.evalHavingExpr(p, gRows, allColNames, aliasMap, outerRow));
+    }
+    const andParts = this.splitOutsideQuotes(trimmed, /^AND(?=\s|\()/i);
+    if (andParts.length > 1) {
+      return andParts.every(p => this.evalHavingExpr(p, gRows, allColNames, aliasMap, outerRow));
+    }
+    const hMatch = trimmed.match(/^(.+?)\s*(=|!=|<>|>=|<=|>|<)\s*(.+)$/);
+    if (!hMatch) {
+      throw new Error(`near "${trimmed.split(/\s+/)[0]}": syntax error in HAVING`);
+    }
+    const lhsRaw = hMatch[1].trim();
+    const op = hMatch[2];
+    const rhsVal = this.parseLiteral(hMatch[3]);
+    const aliasKey = lhsRaw.toLowerCase();
+    const leftVal = Object.prototype.hasOwnProperty.call(aliasMap, aliasKey)
+      ? aliasMap[aliasKey]
+      : this.evalSelectExpr(lhsRaw, gRows, allColNames, outerRow);
+    if (leftVal === null || leftVal === undefined) return false;
+    const nL = Number(leftVal);
+    const nR = Number(rhsVal);
+    const bothNum = !Number.isNaN(nL) && !Number.isNaN(nR);
+    if (op === '=') return bothNum ? nL === nR : String(leftVal) === String(rhsVal);
+    if (op === '!=' || op === '<>') return bothNum ? nL !== nR : String(leftVal) !== String(rhsVal);
+    if (op === '>') return nL > nR;
+    if (op === '>=') return nL >= nR;
+    if (op === '<') return nL < nR;
+    if (op === '<=') return nL <= nR;
+    return false;
+  }
+
+  runSelect(rawQuery, dbKey, isCsv, returnRaw = false, showHeader = false, outerRow = null) {
     const q = rawQuery.trim().replace(/;+$/, '').trim();
     // Parse clauses using top-level clause keywords
-    const clauseRegex = /\b(FROM|WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT)\b/gi;
     const selectMatch = q.match(/^SELECT\s+(DISTINCT\s+)?(.+?)(?:\s+FROM\s+(.+))?$/is);
     if (!selectMatch || !selectMatch[3]) {
       return { output: `Error: near "${q.split(/\s+/)[0]}": syntax error`, type: 'error', code: 1 };
@@ -519,6 +586,7 @@ class SQLEngine {
     if (!baseRef) return { output: `Error: no such table: ${baseSpec.table}`, type: 'error', code: 1 };
 
     const allColNames = [];
+    const starColumns = [];
     const prefixRow = (r, alias, cols) => {
       const out = {};
       for (const c of cols) {
@@ -529,6 +597,7 @@ class SQLEngine {
     };
     baseRef.columns.forEach(c => {
       allColNames.push(c, `${baseSpec.alias}.${c}`);
+      starColumns.push({ expr: `${baseSpec.alias}.${c}`, label: c });
     });
 
     let workingRows = baseRef.rows.map(r => prefixRow(r, baseSpec.alias, baseRef.columns));
@@ -544,6 +613,7 @@ class SQLEngine {
 
       jRef.columns.forEach(c => {
         allColNames.push(c, `${jSpec.alias}.${c}`);
+        starColumns.push({ expr: `${jSpec.alias}.${c}`, label: c });
       });
 
       const onExpr = onMatch[2].trim();
@@ -564,7 +634,7 @@ class SQLEngine {
             }
           }
           const merged = { ...leftRow, ...rightPrefixed };
-          if (this.evalWhere(onExpr, merged, dbKey)) {
+          if (this.evalWhere(onExpr, merged, dbKey, outerRow)) {
             nextRows.push(merged);
             matchedAny = true;
           }
@@ -578,15 +648,24 @@ class SQLEngine {
 
     // WHERE
     if (clauses.WHERE) {
-      workingRows = workingRows.filter(r => this.evalWhere(clauses.WHERE, r, dbKey));
+      workingRows = workingRows.filter(r => this.evalWhere(clauses.WHERE, r, dbKey, outerRow));
     }
 
     // Build projection list
     const selectItems = selectListRaw === '*'
-      ? baseRef.columns
+      ? starColumns.map(s => s.expr)
       : this.splitTopLevel(selectListRaw, ',');
 
-    const hasAgg = selectItems.some(item => /^(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(item.trim()));
+    const headerLabels = selectListRaw === '*'
+      ? starColumns.map(s => s.label)
+      : selectItems.map(item => {
+          const asMatch = item.match(/\s+AS\s+(\w+)\s*$/i);
+          if (asMatch) return asMatch[1];
+          const dotIdx = item.indexOf('.');
+          return dotIdx !== -1 && /^[A-Za-z_][A-Za-z0-9_.]*$/.test(item.trim()) ? item.trim().slice(dotIdx + 1) : item.trim();
+        });
+
+    const hasAgg = selectItems.some(item => /\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(item));
     const groupByCol = clauses['GROUP BY'] ? clauses['GROUP BY'].trim() : null;
 
     let projectedRows = [];
@@ -602,35 +681,26 @@ class SQLEngine {
         groups.get(mapKey).push(r);
       }
       for (const [, gRows] of groups.entries()) {
-        if (clauses.HAVING) {
-          const hMatch = clauses.HAVING.match(/^((?:COUNT|SUM|AVG|MIN|MAX)\s*\([^)]+\)|[A-Za-z_][A-Za-z0-9_.]*)\s*(=|!=|<>|>=|<=|>|<)\s*(.+)$/i);
-          if (hMatch) {
-            const leftVal = this.evalSelectExpr(hMatch[1], gRows, allColNames);
-            const rightVal = this.parseLiteral(hMatch[3]);
-            const op = hMatch[2];
-            let ok = false;
-            if (op === '=') ok = Number(leftVal) === Number(rightVal);
-            else if (op === '!=' || op === '<>') ok = Number(leftVal) !== Number(rightVal);
-            else if (op === '>') ok = Number(leftVal) > Number(rightVal);
-            else if (op === '>=') ok = Number(leftVal) >= Number(rightVal);
-            else if (op === '<') ok = Number(leftVal) < Number(rightVal);
-            else if (op === '<=') ok = Number(leftVal) <= Number(rightVal);
-            if (!ok) continue;
-          }
-        }
         const outObj = {};
+        const aliasMap = {};
         const vals = selectItems.map((item, i) => {
-          const v = this.evalSelectExpr(item, gRows, allColNames);
+          const v = this.evalSelectExpr(item, gRows, allColNames, outerRow);
           outObj[item] = v;
           outObj[`_col${i}`] = v;
+          aliasMap[headerLabels[i].toLowerCase()] = v;
+          const exprNoAs = item.trim().replace(/\s+AS\s+\w+$/i, '').trim().toLowerCase();
+          aliasMap[exprNoAs] = v;
           return v;
         });
+        if (clauses.HAVING && !this.evalHavingExpr(clauses.HAVING, gRows, allColNames, aliasMap, outerRow)) {
+          continue;
+        }
         projectedRows.push({ vals, raw: gRows[0], outObj });
       }
     } else if (hasAgg) {
       const outObj = {};
       const vals = selectItems.map((item, i) => {
-        const v = this.evalSelectExpr(item, workingRows, allColNames);
+        const v = this.evalSelectExpr(item, workingRows, allColNames, outerRow);
         outObj[item] = v;
         outObj[`_col${i}`] = v;
         return v;
@@ -640,7 +710,7 @@ class SQLEngine {
       for (const r of workingRows) {
         const outObj = {};
         const vals = selectItems.map((item, i) => {
-          const v = this.evalSelectExpr(item, [r], allColNames);
+          const v = this.evalSelectExpr(item, [r], allColNames, outerRow);
           outObj[item] = v;
           outObj[`_col${i}`] = v;
           return v;
@@ -704,6 +774,9 @@ class SQLEngine {
 
     const sep = isCsv ? ',' : '|';
     const outLines = projectedRows.map(p => p.vals.map(v => (v === null || v === undefined ? '' : String(v))).join(sep));
+    if (showHeader && projectedRows.length > 0) {
+      outLines.unshift(headerLabels.join(sep));
+    }
     return { output: outLines.join('\n'), code: 0 };
   }
 
@@ -713,15 +786,20 @@ class SQLEngine {
     }
 
     let isCsv = false;
+    let showHeader = false;
     const cleanArgs = [];
     for (const a of args) {
       if (a === '-csv') isCsv = true;
-      else if (a === '-header' || a === '-noheader') continue;
+      else if (a === '-header') showHeader = true;
+      else if (a === '-noheader') showHeader = false;
       else cleanArgs.push(a);
     }
 
     const dbFile = cleanArgs[0];
-    const query = cleanArgs.slice(1).join(' ').trim().replace(/^["']|["']$/g, '');
+    let query = cleanArgs.slice(1).join(' ').trim();
+    if ((query.startsWith('"') && query.endsWith('"')) || (query.startsWith("'") && query.endsWith("'"))) {
+      query = query.slice(1, -1).trim();
+    }
     const dbKey = this.getDbKey(dbFile);
 
     if (!query) {
@@ -859,7 +937,7 @@ class SQLEngine {
     // SELECT
     if (/^SELECT\s+/i.test(query)) {
       try {
-        return this.runSelect(query, dbKey, isCsv, false);
+        return this.runSelect(query, dbKey, isCsv, false, showHeader);
       } catch (err) {
         return { output: `Error: ${err.message}`, type: 'error', code: 1 };
       }

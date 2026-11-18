@@ -4664,10 +4664,10 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Seu primeiro robô com Shebang (#!/bin/bash)",
     "description": "Todo script de automação começa com a linha `#!/bin/bash` (shebang) para indicar qual interpretador deve executá-lo.\nCrie `organiza.sh` contendo `#!/bin/bash` e `echo \"Iniciando automacao...\"`, torne-o executável com `chmod +x organiza.sh` e rode `./organiza.sh`.",
-    "hint": "Use `printf '#!/bin/bash\\necho \"Iniciando automacao...\"\\n' > organiza.sh && chmod +x organiza.sh && ./organiza.sh` (ou edite com `nano organiza.sh`).",
-    "answer": "printf '#!/bin/bash\\necho \"Iniciando automacao...\"\\n' > organiza.sh && chmod +x organiza.sh && ./organiza.sh",
+    "hint": "Use `nano organiza.sh` ou gere via here-doc:\n`cat << 'EOF' > organiza.sh`\n`#!/bin/bash`\n`echo \"Iniciando automacao...\"`\n`EOF`",
+    "answer": "cat << 'EOF' > organiza.sh\n#!/bin/bash\necho \"Iniciando automacao...\"\nEOF\nchmod +x organiza.sh && ./organiza.sh",
     "answerSteps": [
-      "printf '#!/bin/bash\\necho \"Iniciando automacao...\"\\n' > organiza.sh",
+      "cat << 'EOF' > organiza.sh\n#!/bin/bash\necho \"Iniciando automacao...\"\nEOF",
       "chmod +x organiza.sh",
       "./organiza.sh"
     ],
@@ -4763,10 +4763,10 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Script organizador com laço for e condicional [ -f ]",
     "description": "Em vez de digitar `mv` todo dia, transforme a triagem em um script executável!\nCrie `organizar_downloads.sh` com um laço `for` e teste `[ -f \"$f\" ]` para mover `.pdf` para `downloads/documentos/` e `.png` para `downloads/imagens/`. Dê `+x` e execute `./organizar_downloads.sh`.",
-    "hint": "Crie `organizar_downloads.sh` usando `for f in downloads/*.pdf; do if [ -f \"$f\" ]; then mv \"$f\" downloads/documentos/; fi; done` (e outro para `.png`), depois `chmod +x organizar_downloads.sh && ./organizar_downloads.sh`.",
-    "answer": "printf '#!/bin/bash\\nfor f in downloads/*.pdf; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/documentos/\\n  fi\\ndone\\nfor f in downloads/*.png; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/imagens/\\n  fi\\ndone\\n' > organizar_downloads.sh && chmod +x organizar_downloads.sh && ./organizar_downloads.sh",
+    "hint": "Use `cat << 'EOF' > organizar_downloads.sh` com dois blocos `for` (ou `[[ \"$f\" == *.pdf ]]`) e rode `chmod +x organizar_downloads.sh && ./organizar_downloads.sh`.",
+    "answer": "cat << 'EOF' > organizar_downloads.sh\n#!/bin/bash\nfor f in downloads/*.pdf; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/documentos/\n  fi\ndone\nfor f in downloads/*.png; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/imagens/\n  fi\ndone\nEOF\nchmod +x organizar_downloads.sh && ./organizar_downloads.sh",
     "answerSteps": [
-      "printf '#!/bin/bash\\nfor f in downloads/*.pdf; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/documentos/\\n  fi\\ndone\\nfor f in downloads/*.png; do\\n  if [ -f \"$f\" ]; then\\n    mv \"$f\" downloads/imagens/\\n  fi\\ndone\\n' > organizar_downloads.sh",
+      "cat << 'EOF' > organizar_downloads.sh\n#!/bin/bash\nfor f in downloads/*.pdf; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/documentos/\n  fi\ndone\nfor f in downloads/*.png; do\n  if [ -f \"$f\" ]; then\n    mv \"$f\" downloads/imagens/\n  fi\ndone\nEOF",
       "chmod +x organizar_downloads.sh",
       "./organizar_downloads.sh"
     ],
@@ -4840,10 +4840,10 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Backup compactado validando código de retorno (&&)",
     "description": "Um bom script de backup nunca assume que deu certo: ele valida o status de retorno (`0`) antes de registrar sucesso.\nCrie/execute `backup.sh` compactando `documents` em `backups/docs_backup.tar.gz` com `tar -czf` e só exiba `Backup OK` se o `tar` tiver sucesso.",
-    "hint": "Execute `printf '#!/bin/bash\\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\\n' > backup.sh && chmod +x backup.sh && ./backup.sh`",
-    "answer": "printf '#!/bin/bash\\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\\n' > backup.sh && chmod +x backup.sh && ./backup.sh",
+    "hint": "Crie `backup.sh` com `tar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"`, dê `+x` e execute `./backup.sh`.",
+    "answer": "cat << 'EOF' > backup.sh\n#!/bin/bash\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\nEOF\nchmod +x backup.sh && ./backup.sh",
     "answerSteps": [
-      "printf '#!/bin/bash\\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\\n' > backup.sh",
+      "cat << 'EOF' > backup.sh\n#!/bin/bash\ntar -czf backups/docs_backup.tar.gz documents && echo \"Backup OK\"\nEOF",
       "chmod +x backup.sh",
       "./backup.sh"
     ],
@@ -4861,10 +4861,10 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Sentinela de disco com df, awk e condicional -gt",
     "description": "Scripts de monitoramento tomam decisões lendo métricas do sistema.\nNo simulador, a partição `/` está em `24%` de uso. Crie e rode `checa_disco.sh` extraindo esse percentual (`df -h / | awk '/sda1/ {print $5}' | tr -d '%'`) e imprimindo `ALERTA: Disco alto` quando for maior que `20` (`-gt 20`).",
-    "hint": "Use `printf '#!/bin/bash\\nUSO=$(df -h / | awk '''/sda1/ {print $5}''' | tr -d '''%''')\\nif [ \"$USO\" -gt 20 ]; then\\n  echo \"ALERTA: Disco alto (${USO}%%)\"\\nfi\\n' > checa_disco.sh && chmod +x checa_disco.sh && ./checa_disco.sh`",
-    "answer": "printf '#!/bin/bash\\nUSO=$(df -h / | awk '\\''/sda1/ {print $5}'\\'' | tr -d '\\''%'\\'')\\nif [ \"$USO\" -gt 20 ]; then\\n  echo \"ALERTA: Disco alto (${USO}%%)\"\\nfi\\n' > checa_disco.sh && chmod +x checa_disco.sh && ./checa_disco.sh",
+    "hint": "Use `cat << 'EOF' > checa_disco.sh` calculando `USO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')` e testando `if [ \"$USO\" -gt 20 ]; then echo \"ALERTA: Disco alto (${USO}%)\"; fi`.",
+    "answer": "cat << 'EOF' > checa_disco.sh\n#!/bin/bash\nUSO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')\nif [ \"$USO\" -gt 20 ]; then\n  echo \"ALERTA: Disco alto (${USO}%)\"\nfi\nEOF\nchmod +x checa_disco.sh && ./checa_disco.sh",
     "answerSteps": [
-      "printf '#!/bin/bash\\nUSO=$(df -h / | awk '\\''/sda1/ {print $5}'\\'' | tr -d '\\''%'\\'')\\nif [ \"$USO\" -gt 20 ]; then\\n  echo \"ALERTA: Disco alto (${USO}%%)\"\\nfi\\n' > checa_disco.sh",
+      "cat << 'EOF' > checa_disco.sh\n#!/bin/bash\nUSO=$(df -h / | awk '/sda1/ {print $5}' | tr -d '%')\nif [ \"$USO\" -gt 20 ]; then\n  echo \"ALERTA: Disco alto (${USO}%)\"\nfi\nEOF",
       "chmod +x checa_disco.sh",
       "./checa_disco.sh"
     ],
@@ -4881,11 +4881,11 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "Autocorreção (Watchdog) de serviço com systemctl",
-    "description": "O serviço `nginx` caiu! Em vez de acordar às 3h da manhã, automações de health-check verificam se o serviço está ativo e o reiniciam automaticamente em caso de falha (`||`).\nCrie `watchdog.sh` com `systemctl is-active nginx || sudo systemctl start nginx` e execute `./watchdog.sh` para recuperar o Nginx.",
-    "hint": "Execute `printf '#!/bin/bash\\nsystemctl is-active nginx || sudo systemctl start nginx\\n' > watchdog.sh && chmod +x watchdog.sh && ./watchdog.sh`",
-    "answer": "printf '#!/bin/bash\\nsystemctl is-active nginx || sudo systemctl start nginx\\n' > watchdog.sh && chmod +x watchdog.sh && ./watchdog.sh",
+    "description": "O serviço `nginx` caiu! Em vez de acordar às 3h da manhã, automações de health-check verificam se o serviço está ativo e o reiniciam automaticamente em caso de falha (`||` ou `if ! systemctl is-active --quiet nginx`).\nCrie `watchdog.sh`, torne executável e rode `./watchdog.sh` para recuperar o Nginx.",
+    "hint": "Crie `watchdog.sh` com `systemctl is-active --quiet nginx || sudo systemctl start nginx` (ou usando `if ! systemctl ...`), dê `chmod +x` e execute `./watchdog.sh`.",
+    "answer": "cat << 'EOF' > watchdog.sh\n#!/bin/bash\nif ! systemctl is-active --quiet nginx; then\n  sudo systemctl start nginx\nfi\nEOF\nchmod +x watchdog.sh && ./watchdog.sh",
     "answerSteps": [
-      "printf '#!/bin/bash\\nsystemctl is-active nginx || sudo systemctl start nginx\\n' > watchdog.sh",
+      "cat << 'EOF' > watchdog.sh\n#!/bin/bash\nif ! systemctl is-active --quiet nginx; then\n  sudo systemctl start nginx\nfi\nEOF",
       "chmod +x watchdog.sh",
       "./watchdog.sh"
     ],
@@ -4922,11 +4922,11 @@ const ALL_LESSONS = [
     "difficulty": "Avançado",
     "lpicObjective": null,
     "title": "🏆 Projeto Final Bash: Rotina Noturna Autônoma",
-    "description": "Combine tudo em um único robô `rotina_noturna.sh` que: 1) move `.pdf` de `downloads/` para `downloads/documentos/`, 2) apaga `.tmp` em `downloads/`, 3) sincroniza `documents/` em `backups/documents/` com `rsync -a`, e 4) registra `Rotina OK` em `rotina.log`.\nCrie, execute `./rotina_noturna.sh` e agende às `03:00` no crontab!",
-    "hint": "Monte `rotina_noturna.sh`, dê `chmod +x`, execute `./rotina_noturna.sh` e grave `0 3 * * * /home/user/rotina_noturna.sh` no `crontab`.",
-    "answer": "printf '#!/bin/bash\\nmv downloads/*.pdf downloads/documentos/\\nfind downloads -type f -name \"*.tmp\" -delete\\nrsync -a documents/ backups/documents/\\necho \"Rotina OK\" >> rotina.log\\n' > rotina_noturna.sh && chmod +x rotina_noturna.sh && ./rotina_noturna.sh && printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -",
+    "description": "Combine tudo em um único robô `rotina_noturna.sh` que: 1) move `.pdf` de `downloads/` para `downloads/documentos/`, 2) apaga `.tmp` em `downloads/`, 3) sincroniza `documents/` em `backups/documents/` com `rsync -a`, e 4) registra `Rotina OK` em `rotina.log`.\nCrie, execute `./rotina_noturna.sh` e agende às `03:00` no crontab gravando saída em `rotina.log`!",
+    "hint": "Monte `rotina_noturna.sh`, dê `chmod +x`, execute `./rotina_noturna.sh` e agende `0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1` no `crontab -`.",
+    "answer": "cat << 'EOF' > rotina_noturna.sh\n#!/bin/bash\nmv downloads/*.pdf downloads/documentos/\nfind downloads -type f -name \"*.tmp\" -delete\nrsync -a documents/ backups/documents/\necho \"Rotina OK\" >> rotina.log\nEOF\nchmod +x rotina_noturna.sh && ./rotina_noturna.sh && printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -",
     "answerSteps": [
-      "printf '#!/bin/bash\\nmv downloads/*.pdf downloads/documentos/\\nfind downloads -type f -name \"*.tmp\" -delete\\nrsync -a documents/ backups/documents/\\necho \"Rotina OK\" >> rotina.log\\n' > rotina_noturna.sh",
+      "cat << 'EOF' > rotina_noturna.sh\n#!/bin/bash\nmv downloads/*.pdf downloads/documentos/\nfind downloads -type f -name \"*.tmp\" -delete\nrsync -a documents/ backups/documents/\necho \"Rotina OK\" >> rotina.log\nEOF",
       "chmod +x rotina_noturna.sh",
       "./rotina_noturna.sh",
       "printf '0 3 * * * /home/user/rotina_noturna.sh >> /home/user/rotina.log 2>&1\\n' | crontab -"
@@ -4964,10 +4964,10 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Criar arquivo de Inventário INI (inventory.ini)",
     "description": "O inventário diz ao Ansible quais servidores existem e como se agrupam por função.\nCrie `inventory.ini` no diretório atual definindo o grupo `[webservers]` com `web1` e `web2`, e o grupo `[databases]` com `db1`.",
-    "hint": "Use `printf '[webservers]\\nweb1\\nweb2\\n\\n[databases]\\ndb1\\n' > inventory.ini` (ou edite com `nano inventory.ini`).",
-    "answer": "printf '[webservers]\\nweb1\\nweb2\\n\\n[databases]\\ndb1\\n' > inventory.ini",
+    "hint": "Use `cat << 'EOF' > inventory.ini` (ou edite com `nano inventory.ini`).",
+    "answer": "cat << 'EOF' > inventory.ini\n[webservers]\nweb1\nweb2\n\n[databases]\ndb1\nEOF",
     "answerSteps": [
-      "printf '[webservers]\\nweb1\\nweb2\\n\\n[databases]\\ndb1\\n' > inventory.ini"
+      "cat << 'EOF' > inventory.ini\n[webservers]\nweb1\nweb2\n\n[databases]\ndb1\nEOF"
     ],
     "relatedCommands": [
       "ansible",
@@ -5075,10 +5075,10 @@ const ALL_LESSONS = [
     "lpicObjective": null,
     "title": "Escrever e executar seu primeiro Playbook YAML (webserver.yml)",
     "description": "Comandos ad-hoc são pontuais; **Playbooks YAML** transformam infraestrutura em código reutilizável e versionado no Git.\nCrie `webserver.yml` declarando `hosts: webservers`, `become: yes` e duas `tasks` (`apt` para `nginx` e `service` para iniciar/habilitar `nginx`), e rode com `ansible-playbook`.",
-    "hint": "Crie `webserver.yml` e execute `ansible-playbook -i inventory.ini webserver.yml`.",
-    "answer": "printf '%s\\n' '- name: Configurar servidores web' '  hosts: webservers' '  become: yes' '  tasks:' '    - name: Instalar nginx' '      apt: name=nginx state=present' '    - name: Iniciar nginx' '      service: name=nginx state=started enabled=yes' > webserver.yml && ansible-playbook -i inventory.ini webserver.yml",
+    "hint": "Crie `webserver.yml` (via `cat << 'EOF'` ou `nano webserver.yml`) e execute `ansible-playbook -i inventory.ini webserver.yml`.",
+    "answer": "cat << 'EOF' > webserver.yml\n- name: Configurar servidores web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Iniciar nginx\n      service: name=nginx state=started enabled=yes\nEOF\nansible-playbook -i inventory.ini webserver.yml",
     "answerSteps": [
-      "printf '%s\\n' '- name: Configurar servidores web' '  hosts: webservers' '  become: yes' '  tasks:' '    - name: Instalar nginx' '      apt: name=nginx state=present' '    - name: Iniciar nginx' '      service: name=nginx state=started enabled=yes' > webserver.yml",
+      "cat << 'EOF' > webserver.yml\n- name: Configurar servidores web\n  hosts: webservers\n  become: yes\n  tasks:\n    - name: Instalar nginx\n      apt: name=nginx state=present\n    - name: Iniciar nginx\n      service: name=nginx state=started enabled=yes\nEOF",
       "ansible-playbook -i inventory.ini webserver.yml"
     ],
     "relatedCommands": [

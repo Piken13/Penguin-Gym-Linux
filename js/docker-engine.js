@@ -93,6 +93,8 @@ docker.io/library/${cleanImg}:${tag}`,
             name = arg.slice(7);
           } else if ((arg === '-p' || arg === '--publish') && rest[i + 1]) {
             ports = rest[++i];
+          } else if (arg.startsWith('--publish=')) {
+            ports = arg.slice(10);
           } else if (arg.startsWith('-p') && arg.length > 2) {
             ports = arg.slice(2);
           } else if (arg.startsWith('-') && !arg.startsWith('--') && arg.length > 1) {
@@ -311,7 +313,19 @@ To generate this message, Docker took the following steps:
       }
 
       case 'exec': {
-        const clean = rest.filter(r => !/^-[itd]+$/.test(r));
+        const clean = [];
+        let parsingCmd = false;
+        for (let i = 0; i < rest.length; i++) {
+          const r = rest[i];
+          if (!parsingCmd && r.startsWith('-')) {
+            if ((r === '-u' || r === '--user' || r === '-e' || r === '--env' || r === '-w' || r === '--workdir') && rest[i + 1]) {
+              i++;
+            }
+            continue;
+          }
+          parsingCmd = true;
+          clean.push(r);
+        }
         const target = clean[0];
         const cmdTokens = clean.slice(1);
         if (!target) return { output: '"docker exec" requer o ID ou nome do container.', type: 'error', code: 1 };
@@ -322,15 +336,20 @@ To generate this message, Docker took the following steps:
           return { output: `Error: Container ${target} is not running`, type: 'error', code: 1 };
         }
         const innerCmd = cmdTokens.length > 0 ? cmdTokens.join(' ') : 'uname -a';
+        const shortId = c.id.slice(0, 12);
         if (innerCmd === 'bash' || innerCmd === 'sh') {
-          return { output: `root@${c.id.slice(0, 12)}:/# `, code: 0 };
+          return { output: `root@${shortId}:/# `, code: 0 };
         }
-        if (innerCmd === 'uname -a' || innerCmd === 'uname') {
-          return { output: 'Linux ' + c.id.slice(0, 12) + ' 6.1.0-21-amd64 #1 SMP x86_64 GNU/Linux', code: 0 };
+        if (innerCmd === 'uname -a') {
+          return { output: `Linux ${shortId} 6.1.0-21-amd64 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux`, code: 0 };
         }
+        if (innerCmd === 'uname' || innerCmd === 'uname -s') return { output: 'Linux', code: 0 };
+        if (innerCmd === 'uname -r') return { output: '6.1.0-21-amd64', code: 0 };
+        if (innerCmd === 'uname -m') return { output: 'x86_64', code: 0 };
+        if (innerCmd === 'uname -n') return { output: shortId, code: 0 };
         if (innerCmd === 'whoami') return { output: 'root', code: 0 };
         if (innerCmd === 'pwd') return { output: '/', code: 0 };
-        if (innerCmd === 'hostname') return { output: c.id.slice(0, 12), code: 0 };
+        if (innerCmd === 'hostname') return { output: shortId, code: 0 };
         if (innerCmd.startsWith('echo ')) return { output: cmdTokens.slice(1).join(' '), code: 0 };
         if (innerCmd === 'ls' || innerCmd === 'ls -la') {
           return { output: 'bin  boot  dev  etc  home  lib  proc  root  run  sbin  tmp  usr  var', code: 0 };

@@ -47,9 +47,9 @@ class GitEngine {
     if (name === '.git') return true;
     const patterns = this.getIgnoredPatterns();
     for (const pat of patterns) {
-      const cleanPat = pat.replace(/\/$/, '');
+      const cleanPat = pat.replace(/^\/+/, '').replace(/\/+$/, '');
       if (cleanPat === name) return true;
-      if (pat.includes('*') || pat.includes('?')) {
+      if (cleanPat.includes('*') || cleanPat.includes('?')) {
         const reg = new RegExp('^' + cleanPat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
         if (reg.test(name)) return true;
       }
@@ -185,16 +185,40 @@ class GitEngine {
 
       case 'commit': {
         let msg = '';
-        const mIdx = rest.indexOf('-m');
-        if (mIdx !== -1 && rest[mIdx + 1]) {
-          msg = rest.slice(mIdx + 1).join(' ').replace(/^["']|["']$/g, '');
-        } else {
-          const attached = rest.find(r => r.startsWith('-m') && r.length > 2);
-          if (attached) msg = attached.slice(2).replace(/^["']|["']$/g, '');
+        let stageTracked = false;
+        for (let i = 0; i < rest.length; i++) {
+          const arg = rest[i];
+          if (arg === '-a' || arg === '--all') {
+            stageTracked = true;
+          } else if (arg === '-am' || arg === '-ma') {
+            stageTracked = true;
+            if (rest[i + 1] && !rest[i + 1].startsWith('-')) {
+              msg = rest[++i].replace(/^["']|["']$/g, '');
+            }
+          } else if (arg === '-m' || arg === '--message') {
+            if (rest[i + 1] !== undefined) {
+              msg = rest[++i].replace(/^["']|["']$/g, '');
+            }
+          } else if (arg.startsWith('-m') && arg.length > 2) {
+            msg = arg.slice(2).replace(/^["']|["']$/g, '');
+          } else if (arg.startsWith('--message=')) {
+            msg = arg.slice(10).replace(/^["']|["']$/g, '');
+          }
         }
-        if (!msg) msg = 'Commit sem mensagem';
+        if (stageTracked) {
+          for (const f of this.trackedFiles) {
+            const cur = this.readRepoFileContent(f);
+            if (cur !== null && cur !== this.committedContents.get(f)) {
+              this.index.add(f);
+              this.stagedContents.set(f, cur);
+            }
+          }
+        }
         if (this.index.size === 0) {
           return { output: 'Nada a submeter (use "git add" para preparar os arquivos)', type: 'error', code: 1 };
+        }
+        if (!msg || !msg.trim()) {
+          return { output: 'Aborting commit due to empty commit message.\nUse: git commit -m "mensagem do commit"', type: 'error', code: 1 };
         }
         const hash = Math.random().toString(16).substring(2, 9);
         const committedFiles = Array.from(this.index);
@@ -328,12 +352,19 @@ Data:   ${c.date}
           const targetFiles = Array.from(this.index);
           if (targetFiles.length === 0) return { output: '', code: 0 };
           const diffs = targetFiles.map(f => {
+            const hasCommitted = this.committedContents.has(f);
             const oldText = this.committedContents.get(f) || '';
-            const newText = this.stagedContents.get(f) || this.readRepoFileContent(f) || '';
-            if (oldText && oldText !== newText) {
-              return `diff --git a/${f} b/${f}\nindex a1b2c3d..e4f5g6h 100644\n--- a/${f}\n+++ b/${f}\n@@ -1 +1 @@\n\x1b[31m-${oldText.trimEnd()}\x1b[0m\n\x1b[32m+${newText.trimEnd()}\x1b[0m`;
+            const newText = this.stagedContents.has(f) ? this.stagedContents.get(f) : (this.readRepoFileContent(f) || '');
+            if (hasCommitted) {
+              const oldLines = oldText.trimEnd() ? oldText.trimEnd().split('\n') : [];
+              const newLines = newText.trimEnd() ? newText.trimEnd().split('\n') : [];
+              const minus = oldLines.map(l => `\x1b[31m-${l}\x1b[0m`).join('\n');
+              const plus = newLines.map(l => `\x1b[32m+${l}\x1b[0m`).join('\n');
+              return `diff --git a/${f} b/${f}\nindex a1b2c3d..e4f5g6h 100644\n--- a/${f}\n+++ b/${f}\n@@ -1,${oldLines.length} +1,${newLines.length} @@\n${[minus, plus].filter(Boolean).join('\n')}`;
             }
-            return `diff --git a/${f} b/${f}\nindex a1b2c3d..e4f5g6h 100644\n--- a/${f}\n+++ b/${f}\n@@ -1,3 +1,4 @@\n\x1b[31m-/* Versao antiga de ${f} */\x1b[0m\n\x1b[32m+/* Versao modificada de ${f} */\x1b[0m`;
+            const newLines = newText.trimEnd() ? newText.trimEnd().split('\n') : [];
+            const plus = newLines.map(l => `\x1b[32m+${l}\x1b[0m`).join('\n');
+            return `diff --git a/${f} b/${f}\nnew file mode 100644\nindex 0000000..e4f5g6h\n--- /dev/null\n+++ b/${f}\n@@ -0,0 +1,${newLines.length} @@${plus ? '\n' + plus : ''}`;
           });
           return { output: diffs.join('\n\n'), code: 0 };
         }

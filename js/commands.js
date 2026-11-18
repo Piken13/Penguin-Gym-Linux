@@ -284,9 +284,66 @@ class CommandEngine {
     return { line: result, expanded };
   }
 
-  executeLine(line, isSubshell = false) {
+  preprocessHereDocs(text) {
+    this._hereDocs = this._hereDocs || new Map();
+    if (!text || !text.includes('<<') || !text.includes('\n')) return text;
+
+    const lines = text.split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Procura marcador << DELIM ou <<- DELIM fora de aspas (e diferente de <<<)
+      let inQ = null;
+      let matchPos = -1;
+      for (let j = 0; j < line.length - 1; j++) {
+        const ch = line[j];
+        if (ch === '\\' && j + 1 < line.length && inQ !== "'") { j++; continue; }
+        if (ch === '"' || ch === "'") { inQ = inQ === ch ? null : (inQ || ch); continue; }
+        if (!inQ && ch === '<' && line[j + 1] === '<' && line[j + 2] !== '<') {
+          matchPos = j;
+          break;
+        }
+      }
+
+      if (matchPos !== -1) {
+        const afterOp = line.slice(matchPos + 2);
+        const delimMatch = afterOp.match(/^(-?)\s*(?:(['"])([A-Za-z_][A-Za-z0-9_-]*)\2|([A-Za-z_][A-Za-z0-9_-]*))/);
+        if (delimMatch) {
+          const stripTabs = delimMatch[1] === '-';
+          const isQuoted = Boolean(delimMatch[2]);
+          const delim = delimMatch[3] || delimMatch[4];
+          const opEnd = matchPos + 2 + delimMatch[0].length;
+          const bodyLines = [];
+          let foundEnd = false;
+          let k = i + 1;
+          for (; k < lines.length; k++) {
+            const candidate = stripTabs ? lines[k].replace(/^\t+/, '') : lines[k];
+            if (candidate.trimEnd() === delim) {
+              foundEnd = true;
+              break;
+            }
+            bodyLines.push(stripTabs ? lines[k].replace(/^\t+/, '') : lines[k]);
+          }
+          if (foundEnd) {
+            const hdId = `__HEREDOC_${this._hereDocs.size}__`;
+            this._hereDocs.set(hdId, {
+              content: bodyLines.join('\n') + (bodyLines.length > 0 ? '\n' : ''),
+              expandVars: !isQuoted
+            });
+            out.push(line.slice(0, matchPos) + `<<< ${hdId}` + line.slice(opEnd));
+            i = k;
+            continue;
+          }
+        }
+      }
+      out.push(line);
+    }
+    return out.join('\n');
+  }
+
+  executeLine(line, isSubshell = false, splitStreams = false) {
     line = (line || '').trim();
-    if (!line) return { output: '', code: 0 };
+    if (!line) return { output: '', stdout: '', stderr: '', code: 0 };
 
     const originalCommand = line;
     let historyEcho = null;
@@ -295,7 +352,7 @@ class CommandEngine {
       const histRes = this.expandHistory(line);
       if (histRes.error) {
         this.lastExitCode = 1;
-        return { output: histRes.error, code: 1, type: 'error', rawCommand: originalCommand };
+        return { output: histRes.error, stdout: '', stderr: histRes.error, code: 1, type: 'error', rawCommand: originalCommand };
       }
       if (histRes.expanded) {
         line = histRes.line;
@@ -305,9 +362,15 @@ class CommandEngine {
       this.history.push(line);
     }
 
-    const parts = this.splitSequential(line);
+    const preparedLine = this.preprocessHereDocs(line);
+    const parts = this.splitSequential(preparedLine);
     const combinedOutput = [];
-    if (historyEcho) combinedOutput.push(historyEcho);
+    const stdoutParts = [];
+    const stderrParts = [];
+    if (historyEcho) {
+      combinedOutput.push(historyEcho);
+      stdoutParts.push(historyEcho);
+    }
 
     let lastCode = 0;
     let lastType = 'text';
@@ -327,7 +390,9 @@ class CommandEngine {
         const jobId = this.backgroundJobs.length + 1;
         const jobPid = this.nextJobPid++;
         this.backgroundJobs.push({ id: jobId, pid: String(jobPid), cmd: item.cmd, state: 'Em execução' });
-        combinedOutput.push(`[${jobId}] ${jobPid}`);
+        const jobLine = `[${jobId}] ${jobPid}`;
+        combinedOutput.push(jobLine);
+        stdoutParts.push(jobLine);
         lastCode = 0;
         lastType = 'text';
         this.lastExitCode = 0;
@@ -336,6 +401,14 @@ class CommandEngine {
 
       const res = this.executeSinglePipeline(item.cmd);
       if (res.output) combinedOutput.push(res.output);
+      if (res.stdout !== undefined || res.stderr !== undefined) {
+        if (res.stdout) stdoutParts.push(res.stdout);
+        if (res.stderr) stderrParts.push(res.stderr);
+      } else if (res.type === 'error') {
+        if (res.output) stderrParts.push(res.output);
+      } else if (res.output) {
+        stdoutParts.push(res.output);
+      }
       if (res.historyCleared) historyCleared = true;
       if (res.wasSubshell) {
         wasSubshell = true;
@@ -350,10 +423,14 @@ class CommandEngine {
       }
     }
 
+    const joinedOut = splitStreams ? stdoutParts.join('\n') : combinedOutput.join('\n');
+    const joinedErr = stderrParts.join('\n');
     return {
-      output: combinedOutput.join('\n'),
+      output: joinedOut,
+      stdout: stdoutParts.join('\n'),
+      stderr: joinedErr,
       code: lastCode,
-      type: lastCode !== 0 && lastType === 'error' ? 'error' : 'text',
+      type: (lastCode !== 0 && lastType === 'error') ? 'error' : 'text',
       expandedCommand: historyEcho,
       rawCommand: originalCommand,
       wasHistoryExpansion,
@@ -607,6 +684,23 @@ class CommandEngine {
   }
 
   executeSinglePipeline(pipeline) {
+    const trimmedPipe = (pipeline || '').trim();
+    if (/^!(?=\s|$)/.test(trimmedPipe)) {
+      const inner = trimmedPipe.slice(1).trim();
+      if (!inner) {
+        this.lastExitCode = 1;
+        return { output: '', code: 1 };
+      }
+      const res = this.executeSinglePipeline(inner);
+      const invertedCode = (res.code !== undefined ? res.code : 0) === 0 ? 1 : 0;
+      this.lastExitCode = invertedCode;
+      return {
+        ...res,
+        code: invertedCode,
+        type: invertedCode === 0 ? 'text' : (res.type || 'text')
+      };
+    }
+
     const ctrlRes = this.executeControlStructure(pipeline);
     if (ctrlRes !== null) {
       this.lastExitCode = ctrlRes.code !== undefined ? ctrlRes.code : 0;
@@ -1193,13 +1287,13 @@ class CommandEngine {
       }
 
       const prevToken = finalTokens[finalTokens.length - 1];
-      const isFindNameArg = finalTokens[0] === 'find' && (prevToken === '-name' || prevToken === '-iname');
+      const skipGlob = (finalTokens[0] === 'find' && (prevToken === '-name' || prevToken === '-iname')) || finalTokens[0] === '[[';
 
       // Word splitting para expansões sem aspas ($VAR, $(cmd), `cmd`)
       if (hasUnquotedSubstOrVar && segs.every(s => s.quote === null)) {
         const splitPieces = combined.trim().split(/\s+/).filter(Boolean);
         for (const piece of splitPieces) {
-          if (hasUnquotedWildcard && !isFindNameArg && /[*?]|\[.+?\]/.test(piece)) {
+          if (hasUnquotedWildcard && !skipGlob && /[*?]|\[.+?\]/.test(piece)) {
             const matches = this.fs.expandGlob(piece);
             if (matches.length > 0) finalTokens.push(...matches);
             else finalTokens.push(piece);
@@ -1210,7 +1304,7 @@ class CommandEngine {
         continue;
       }
 
-      if (hasUnquotedWildcard && !isFindNameArg) {
+      if (hasUnquotedWildcard && !skipGlob) {
         const matches = this.fs.expandGlob(combined);
         if (matches.length > 0) {
           finalTokens.push(...matches);
@@ -1243,7 +1337,13 @@ class CommandEngine {
     } = this.parseRedirections(aliasExpanded);
 
     if (hereString !== null) {
-      stdin = hereString;
+      if (this._hereDocs && /^__HEREDOC_\d+__$/.test(hereString) && this._hereDocs.has(hereString)) {
+        const hd = this._hereDocs.get(hereString);
+        this._hereDocs.delete(hereString);
+        stdin = hd.expandVars ? this.expandVarsAndSubshells(hd.content) : hd.content;
+      } else {
+        stdin = hereString;
+      }
     } else if (targetInFile) {
       try {
         stdin = this.fs.readFile(targetInFile);
@@ -1811,8 +1911,10 @@ Operating System: Debian GNU/Linux 12 (bookworm)
         }
 
         case 'useradd':
+          return this.cmdUseradd(args, false);
+
         case 'adduser':
-          return this.cmdUseradd(args);
+          return this.cmdUseradd(args, true);
 
         case 'userdel':
           return this.cmdUserdel(args);
@@ -1847,31 +1949,58 @@ Operating System: Debian GNU/Linux 12 (bookworm)
         }
 
         case 'which': {
-          const target = args[0];
-          if (!target) return { output: '', code: 1 };
-          if (this.fs.getNode(`/usr/bin/${target}`)) return { output: `/usr/bin/${target}`, code: 0 };
-          if (this.fs.getNode(`/bin/${target}`)) return { output: `/bin/${target}`, code: 0 };
-          if (this.fs.getNode(`/sbin/${target}`)) return { output: `/sbin/${target}`, code: 0 };
-          if (this.fs.getNode(`/usr/sbin/${target}`)) return { output: `/usr/sbin/${target}`, code: 0 };
-          const builtins = ['cd', 'pwd', 'echo', 'alias', 'unalias', 'export', 'unset', 'history', 'type', 'help', 'pushd', 'popd', 'dirs', 'exit', 'source', 'test'];
-          if (builtins.includes(target)) {
-            return { output: `${target}: shell built-in command`, code: 0 };
+          let showAll = false;
+          const targets = [];
+          for (const a of args) {
+            if (a === '-a' || a === '--all') showAll = true;
+            else if (!a.startsWith('-')) targets.push(a);
           }
-          const binaries = [
+          if (targets.length === 0) return { output: '', code: 1 };
+
+          const builtins = new Set(['cd', 'pwd', 'echo', 'alias', 'unalias', 'export', 'unset', 'history', 'type', 'help', 'pushd', 'popd', 'dirs', 'exit', 'source', 'test']);
+          const fallbackBinaries = new Set([
             'pwd', 'ls', 'cd', 'clear', 'whoami', 'date', 'echo', 'cat', 'head', 'tail', 'wc', 'sort', 'uniq', 'grep', 'which', 'env', 'printenv', 'help',
             'mkdir', 'touch', 'cp', 'mv', 'rm', 'rmdir', 'diff', 'find', 'chmod', 'chown', 'sudo', 'su', 'less', 'more', 'nano', 'vi', 'vim', 'man', 'whatis', 'apropos', 'neofetch', 'hostname', 'hostnamectl', 'uname', 'uptime',
-            'lscpu', 'lsblk', 'free', 'df', 'fdisk', 'blkid', 'systemctl', 'service', 'journalctl', 'apt', 'apt-get', 'dpkg', 'useradd', 'usermod', 'userdel', 'groupadd', 'passwd', 'groups', 'id', 'crontab', 'dmesg', 'vmstat', 'last', 'w', 'who', 'exit',
+            'lscpu', 'lsblk', 'free', 'df', 'fdisk', 'blkid', 'mount', 'umount', 'reboot', 'shutdown', 'systemctl', 'service', 'journalctl', 'apt', 'apt-get', 'dpkg', 'useradd', 'adduser', 'usermod', 'userdel', 'groupadd', 'passwd', 'groups', 'id', 'crontab', 'dmesg', 'vmstat', 'last', 'w', 'who', 'exit',
             'tee', 'cut', 'tr', 'sed', 'awk', 'xargs', 'column', 'paste', 'tree', 'ps', 'top', 'htop', 'kill', 'pkill', 'killall', 'pgrep', 'du', 'jq',
             'tar', 'gzip', 'gunzip', 'zcat', 'zip', 'unzip', 'ln', 'stat', 'file', 'nl', 'tac', 'rev', 'md5sum', 'sha256sum', 'cksum', 'base64',
-            'git', 'docker', 'sqlite3', 'ansible', 'ansible-playbook', 'ssh-keygen', 'logger',
-            'bash', 'sh', 'source', 'alias', 'unalias', 'history', 'pushd', 'popd', 'dirs', 'seq', 'bc', 'expr', 'test', 'type', 'sleep', 'cowsay',
+            'git', 'docker', 'sqlite3', 'ansible', 'ansible-playbook', 'ssh', 'scp', 'rsync', 'ssh-keygen', 'logger',
+            'bash', 'sh', 'source', 'alias', 'unalias', 'history', 'pushd', 'popd', 'dirs', 'seq', 'bc', 'expr', 'printf', 'test', 'type', 'sleep', 'cowsay',
             'ip', 'ifconfig', 'route', 'ping', 'curl', 'wget', 'dig', 'nslookup', 'host', 'traceroute', 'tracepath', 'ss', 'netstat', 'nc', 'netcat', 'nmap', 'telnet', 'ufw', 'iptables', 'nftables',
             'realpath', 'readlink', 'basename', 'dirname', 'reset-fs', 'clean-env'
-          ];
-          if (binaries.includes(target)) {
-            return { output: `/usr/bin/${target}`, code: 0 };
+          ]);
+
+          const out = [];
+          let missingAny = false;
+          for (const target of targets) {
+            const hits = [];
+            for (const dir of ['/usr/bin', '/bin', '/sbin', '/usr/sbin']) {
+              if (this.fs.getNode(`${dir}/${target}`)) {
+                hits.push(`${dir}/${target}`);
+                if (!showAll) break;
+              }
+            }
+            if (hits.length === 0) {
+              if (builtins.has(target)) {
+                hits.push(`${target}: shell built-in command`);
+              } else if (fallbackBinaries.has(target)) {
+                hits.push(`/usr/bin/${target}`);
+              }
+            } else if (showAll && builtins.has(target)) {
+              hits.push(`${target}: shell built-in command`);
+            }
+            if (hits.length > 0) {
+              out.push(...hits);
+            } else {
+              missingAny = true;
+              out.push(`which: nenhum ${target} em (/usr/local/bin:/usr/bin:/bin)`);
+            }
           }
-          return { output: `which: nenhum ${target} em (/usr/local/bin:/usr/bin:/bin)`, code: 1, type: 'error' };
+          return {
+            output: out.join('\n'),
+            code: missingAny ? 1 : 0,
+            type: missingAny ? 'error' : 'text'
+          };
         }
 
         case 'ps':
@@ -2175,6 +2304,7 @@ Operating System: Debian GNU/Linux 12 (bookworm)
             output: '',
             code: 0,
             action: 'nano',
+            editorMode: cmd,
             filePath: targetFile
           };
         }
@@ -2317,16 +2447,49 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       return line;
     };
 
-    const cleanedScript = (content || '')
-      .split('\n')
-      .map(l => stripInlineComment(l))
-      .filter(l => l.trim().length > 0)
-      .join('\n');
+    const cleanScriptOutsideHereDocs = (rawText) => {
+      const lines = (rawText || '').split('\n');
+      const cleaned = [];
+      let inHereDocDelim = null;
+      let stripTabs = false;
+      for (const l of lines) {
+        if (inHereDocDelim !== null) {
+          cleaned.push(l);
+          const candidate = stripTabs ? l.replace(/^\t+/, '') : l;
+          if (candidate.trimEnd() === inHereDocDelim) {
+            inHereDocDelim = null;
+            stripTabs = false;
+          }
+          continue;
+        }
+        const uncommented = stripInlineComment(l);
+        if (uncommented.trim().length > 0) {
+          cleaned.push(uncommented);
+          const hdMatch = uncommented.match(/<<(-?)\s*(?:(['"])([A-Za-z_][A-Za-z0-9_-]*)\2|([A-Za-z_][A-Za-z0-9_-]*))/);
+          if (hdMatch && !/<<</.test(uncommented)) {
+            stripTabs = hdMatch[1] === '-';
+            inHereDocDelim = hdMatch[3] || hdMatch[4];
+          }
+        }
+      }
+      return cleaned.join('\n');
+    };
+
+    const cleanedScript = cleanScriptOutsideHereDocs(content);
 
     try {
-      if (!cleanedScript.trim()) return { output: '', code: 0 };
-      const res = this.executeLine(cleanedScript, true);
-      return { output: res.output || '', code: res.code || 0 };
+      if (!cleanedScript.trim()) return { output: '', stdout: '', stderr: '', code: 0 };
+      const res = this.executeLine(cleanedScript, true, true);
+      const out = res.stdout !== undefined ? res.stdout : (res.output || '');
+      const err = res.stderr || '';
+      const code = res.code || 0;
+      return {
+        output: out,
+        stdout: out,
+        stderr: err,
+        type: (code !== 0 && (err || res.type === 'error')) ? 'error' : 'text',
+        code
+      };
     } finally {
       if (isolated) {
         this.shellVars = savedVars;
@@ -2389,8 +2552,12 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       else if (op === '-n') result = val.length > 0;
     } else if (tokens.length >= 3) {
       const [left, op, right] = tokens;
-      if (op === '=' || op === '==') result = left === right;
-      else if (op === '!=') result = left !== right;
+      const globTest = (str, pat) => this.fs.globSegmentToRegex(pat).test(str);
+      if (op === '=' || op === '==') {
+        result = cmd === '[[' && /[*?\[]/.test(right) ? globTest(left, right) : left === right;
+      } else if (op === '!=') {
+        result = cmd === '[[' && /[*?\[]/.test(right) ? !globTest(left, right) : left !== right;
+      }
       else if (op === '-eq') result = Number(left) === Number(right);
       else if (op === '-ne') result = Number(left) !== Number(right);
       else if (op === '-gt') result = Number(left) > Number(right);
@@ -2613,7 +2780,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['git', '6'],
         icon: '🔀',
         name: 'Git',
-        lessons: getCatRangeLabel('git', 'Lições #150 - #165'),
+        lessons: getCatRangeLabel('git', 'Lições #150 - #166'),
         desc: 'Controle de versão distribuído de arquivos e projetos',
         commandsSummary: 'git (init, status, add, commit, log, diff, branch, checkout, merge, restore)',
         commands: [
@@ -2636,7 +2803,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['docker', '7'],
         icon: '🐳',
         name: 'Docker',
-        lessons: getCatRangeLabel('docker', 'Lições #166 - #180'),
+        lessons: getCatRangeLabel('docker', 'Lições #167 - #181'),
         desc: 'Gerenciamento de containers e imagens de aplicações isoladas',
         commandsSummary: 'docker (pull, images, build, run, start, ps, logs, exec, inspect, stop, rm, rmi)',
         commands: [
@@ -2660,7 +2827,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['scripts', 'scripting', 'script', '8'],
         icon: '📜',
         name: 'Scripts',
-        lessons: getCatRangeLabel('scripting', 'Lições #181 - #203'),
+        lessons: getCatRangeLabel('scripting', 'Lições #182 - #204'),
         desc: 'Automação bash, variáveis, laços, condicionais e histórico',
         commandsSummary: 'bash, sh, source, alias, unalias, history, !!, pushd, popd, dirs, for...done, if...fi, test / [ ], $((calc)), $VAR, $(cmd), <<<',
         commands: [
@@ -2689,7 +2856,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['redes', 'rede', 'networking', 'net', '9'],
         icon: '🌐',
         name: 'Redes',
-        lessons: getCatRangeLabel('networking', 'Lições #204 - #229'),
+        lessons: getCatRangeLabel('networking', 'Lições #205 - #231'),
         desc: 'Conectividade, diagnósticos, resolução DNS e firewall',
         commandsSummary: 'ip (addr/route), ifconfig, ping, curl, wget, dig, nslookup, host, traceroute, ss, netstat, nc, nmap, ufw',
         commands: [
@@ -2716,7 +2883,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['sql', 'database', 'banco', '10'],
         icon: '🗄️',
         name: 'SQL',
-        lessons: getCatRangeLabel('database', 'Lições #230 - #246'),
+        lessons: getCatRangeLabel('database', 'Lições #232 - #250'),
         desc: 'Banco de dados relacional SQLite e consultas estruturadas',
         commandsSummary: 'sqlite3 <banco.db> "QUERY", .tables, .schema, CREATE, INSERT, SELECT, WHERE, LIKE, AVG, JOIN, UPDATE, DELETE',
         commands: [
@@ -2740,7 +2907,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['autobash', 'automation', 'automacao', 'automation-bash', '11'],
         icon: '🤖',
         name: 'Auto Bash',
-        lessons: getCatRangeLabel('automation-bash', 'Lições #257 - #270'),
+        lessons: getCatRangeLabel('automation-bash', 'Lições #251 - #264'),
         desc: 'Automação prática local: robôs Bash, triagem de Downloads, rsync incremental, watchdogs e cron',
         commandsSummary: 'chmod +x, for/if, mv, find -delete, rsync -av/-n, df, systemctl, crontab -e, logger',
         commands: [
@@ -2757,7 +2924,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['ansible', 'iac', 'playbook', '12'],
         icon: '⚙️',
         name: 'Ansible',
-        lessons: getCatRangeLabel('ansible', 'Lições #271 - #284'),
+        lessons: getCatRangeLabel('ansible', 'Lições #265 - #278'),
         desc: 'Automação declarativa multi-servidor via SSH: inventários, módulos ad-hoc e Playbooks YAML idempotentes',
         commandsSummary: 'ssh-keygen, inventory.ini, ansible -m ping/shell/setup/copy/apt/service -b, ansible-playbook --check --diff',
         commands: [
@@ -2773,7 +2940,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         alias: ['incidentes', 'incidents', 'boss', 'troubleshooting', '13'],
         icon: '🚨',
         name: 'Incidentes',
-        lessons: getCatRangeLabel('incidents', 'Lições #285 - #290'),
+        lessons: getCatRangeLabel('incidents', 'Lições #279 - #284'),
         desc: 'Missões práticas de investigação e resolução de incidentes combinando múltiplos comandos',
         commandsSummary: 'grep, awk, systemctl, ss, git restore, docker stop/rm/rmi, sqlite3, gzip, sha256sum, chmod',
         commands: [
@@ -2807,7 +2974,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       return this.cmdMan([args[0]]);
     }
 
-    // help geral sem argumentos: exibição organizada exatamente pelas 10 categorias das questões
+    // help geral sem argumentos: exibição organizada pelas 13 trilhas de categorias das questões
     const header = [
       '🐧 Penguin Gym Linux - Manual de Comandos Organizados por Categoria:',
       '======================================================================'
@@ -2925,7 +3092,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       else if (a === '--inode') showInode = true;
       else if (a === '--classify') classify = true;
       else if (a.startsWith('--color')) continue;
-      else if (a.startsWith('-')) {
+      else if (a.startsWith('-') && !a.startsWith('--')) {
         if (a.includes('a')) showAll = true;
         if (a.includes('A')) showAlmostAll = true;
         if (a.includes('l')) longFormat = true;
@@ -3255,11 +3422,11 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       if (a === '-p' || a === '--parents') recursive = true;
       else if ((a === '-m' || a === '--mode') && args[i + 1]) modeSpec = args[++i];
       else if (a.startsWith('-m') && a.length > 2) modeSpec = a.slice(2);
-      else if (a.startsWith('-') && a.includes('p')) recursive = true;
+      else if (a.startsWith('-') && !a.startsWith('--') && a.includes('p')) recursive = true;
       else if (!a.startsWith('-')) dirs.push(a);
     }
     if (dirs.length === 0) throw new Error('mkdir: operando ausente');
-    const initialPerm = modeSpec ? this.fs.computePermissions('rwxr-xr-x', modeSpec) : 'rwxr-xr-x';
+    const initialPerm = modeSpec ? this.fs.computePermissions('rwxr-xr-x', modeSpec) : null;
     for (const d of dirs) {
       this.fs.createDirectory(d, recursive, initialPerm);
     }
@@ -3279,7 +3446,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     let showNumbers = false;
     const files = [];
     for (const a of args) {
-      if (a === '-n' || a === '--number' || (a.startsWith('-') && a.includes('n'))) showNumbers = true;
+      if (a === '-n' || a === '--number' || (a.startsWith('-') && !a.startsWith('--') && a.includes('n'))) showNumbers = true;
       else if (!a.startsWith('-')) files.push(a);
     }
 
@@ -3349,7 +3516,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     let verbose = false;
     const paths = [];
     for (const a of args) {
-      if (a === '--verbose' || (a.startsWith('-') && a.includes('v'))) verbose = true;
+      if (a === '--verbose' || (a.startsWith('-') && !a.startsWith('--') && a.includes('v'))) verbose = true;
       else if (!a.startsWith('-')) paths.push(a);
     }
     if (paths.length < 2) throw new Error('cp: operando de arquivo de destino ausente');
@@ -3381,7 +3548,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     for (const a of args) {
       if (a === '--recursive') recursive = true;
       else if (a === '--force') force = true;
-      else if (a.startsWith('-') && a.length > 1) {
+      else if (a.startsWith('-') && !a.startsWith('--') && a.length > 1) {
         if (a.includes('r') || a.includes('R')) recursive = true;
         if (a.includes('f')) force = true;
       } else if (!a.startsWith('-')) {
@@ -3448,7 +3615,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       else if (a === '--word-regexp') wordMatch = true;
       else if (a === '--quiet' || a === '--silent') quiet = true;
       else if (a === '-e' && args[i + 1] !== undefined) pattern = args[++i];
-      else if (a.startsWith('-') && a.length > 1) {
+      else if (a.startsWith('-') && !a.startsWith('--') && a.length > 1) {
         if (a.includes('i')) ignoreCase = true;
         if (a.includes('r') || a.includes('R')) recursive = true;
         if (a.includes('n')) showLineNum = true;
@@ -3669,6 +3836,8 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     for (let i = 0; i < args.length; i++) {
       if ((args[i] === '-n' || args[i] === '--lines') && args[i + 1]) {
         count = parseInt(args[++i], 10);
+      } else if (args[i].startsWith('--lines=')) {
+        count = parseInt(args[i].slice(8), 10);
       } else if (/^-\d+$/.test(args[i])) {
         count = parseInt(args[i].slice(1), 10);
       } else if (args[i].startsWith('-n') && args[i].length > 2) {
@@ -3677,6 +3846,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         files.push(args[i]);
       }
     }
+    if (Number.isNaN(count) || count < 0) count = 10;
     if (files.length === 0) {
       const lines = (stdin || '').replace(/\n$/, '').split('\n').slice(0, count);
       return { output: lines.join('\n'), code: 0 };
@@ -3695,6 +3865,8 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     for (let i = 0; i < args.length; i++) {
       if ((args[i] === '-n' || args[i] === '--lines') && args[i + 1]) {
         count = parseInt(args[++i], 10);
+      } else if (args[i].startsWith('--lines=')) {
+        count = parseInt(args[i].slice(8), 10);
       } else if (/^-\d+$/.test(args[i])) {
         count = parseInt(args[i].slice(1), 10);
       } else if (args[i].startsWith('-n') && args[i].length > 2) {
@@ -3703,6 +3875,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
         files.push(args[i]);
       }
     }
+    if (Number.isNaN(count) || count < 0) count = 10;
     const tailText = (text) => {
       const lines = (text || '').replace(/\n$/, '').split('\n');
       return lines.slice(Math.max(0, lines.length - count)).join('\n');
@@ -3714,26 +3887,50 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
   cmdCut(args, stdin) {
     let delim = '\t';
-    let field = 1;
+    let fieldSpec = '1';
     const files = [];
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
-      if (a === '-d' && args[i + 1] !== undefined) {
+      if ((a === '-d' || a === '--delimiter') && args[i + 1] !== undefined) {
         delim = args[++i];
+      } else if (a.startsWith('--delimiter=')) {
+        delim = a.slice(12);
       } else if (a.startsWith('-d') && a.length > 2) {
         delim = a.slice(2);
-      } else if (a === '-f' && args[i + 1] !== undefined) {
-        field = parseInt(args[++i], 10);
+      } else if ((a === '-f' || a === '--fields') && args[i + 1] !== undefined) {
+        fieldSpec = args[++i];
+      } else if (a.startsWith('--fields=')) {
+        fieldSpec = a.slice(9);
       } else if (a.startsWith('-f') && a.length > 2) {
-        field = parseInt(a.slice(2), 10);
+        fieldSpec = a.slice(2);
       } else if (!a.startsWith('-')) {
         files.push(a);
       }
     }
+
+    const extractIndices = (spec, len) => {
+      const chosen = new Set();
+      for (const part of String(spec).split(',')) {
+        const range = part.trim().match(/^(\d*)-(\d*)$/);
+        if (range) {
+          const start = range[1] ? parseInt(range[1], 10) : 1;
+          const end = range[2] ? parseInt(range[2], 10) : len;
+          for (let k = Math.max(1, start); k <= Math.min(len, end); k++) chosen.add(k);
+        } else {
+          const idx = parseInt(part.trim(), 10);
+          if (!Number.isNaN(idx) && idx >= 1 && idx <= len) chosen.add(idx);
+        }
+      }
+      return Array.from(chosen).sort((a, b) => a - b);
+    };
+
     const content = files.length > 0 ? files.map(f => this.fs.readFile(f).replace(/\n$/, '')).join('\n') : (stdin || '').replace(/\n$/, '');
     const lines = content.split('\n').map(l => {
+      if (!l.includes(delim)) return l;
       const parts = l.split(delim);
-      return parts[field - 1] !== undefined ? parts[field - 1] : l;
+      const cols = extractIndices(fieldSpec, parts.length);
+      if (cols.length === 0) return '';
+      return cols.map(c => parts[c - 1] !== undefined ? parts[c - 1] : '').join(delim);
     });
     return { output: lines.join('\n'), code: 0 };
   }
@@ -3747,7 +3944,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       if (a === '--delete') deleteMode = true;
       else if (a === '--squeeze-repeats') squeezeMode = true;
       else if (a === '--complement') complement = true;
-      else if (a.startsWith('-') && a.length > 1) {
+      else if (a.startsWith('-') && !a.startsWith('--') && a.length > 1) {
         for (const fl of a.slice(1)) {
           if (fl === 'd') deleteMode = true;
           else if (fl === 's') squeezeMode = true;
@@ -3855,14 +4052,16 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
   cmdSort(args, stdin) {
     let numeric = false;
     let reverse = false;
+    let unique = false;
     const files = [];
     for (const a of args) {
-      if (a === '--numeric-sort' || (a.startsWith('-') && a.includes('n'))) numeric = true;
-      if (a === '--reverse' || (a.startsWith('-') && a.includes('r'))) reverse = true;
+      if (a === '--numeric-sort' || (a.startsWith('-') && !a.startsWith('--') && a.includes('n'))) numeric = true;
+      if (a === '--reverse' || (a.startsWith('-') && !a.startsWith('--') && a.includes('r'))) reverse = true;
+      if (a === '--unique' || (a.startsWith('-') && !a.startsWith('--') && a.includes('u'))) unique = true;
       if (!a.startsWith('-')) files.push(a);
     }
     const content = files.length > 0 ? files.map(f => this.fs.readFile(f)).join('\n') : stdin;
-    const lines = content.split('\n').filter(l => l.length > 0);
+    let lines = content.split('\n').filter(l => l.length > 0);
     lines.sort((a, b) => {
       if (numeric) {
         const numA = parseFloat(a.trim()) || 0;
@@ -3871,6 +4070,13 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
       }
       return reverse ? b.localeCompare(a) : a.localeCompare(b);
     });
+    if (unique) {
+      const out = [];
+      for (const l of lines) {
+        if (out.length === 0 || out[out.length - 1] !== l) out.push(l);
+      }
+      lines = out;
+    }
     return { output: lines.join('\n'), code: 0 };
   }
 
@@ -3878,7 +4084,7 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     let count = false;
     const files = [];
     for (const a of args) {
-      if (a === '--count' || (a.startsWith('-') && a.includes('c'))) count = true;
+      if (a === '--count' || (a.startsWith('-') && !a.startsWith('--') && a.includes('c'))) count = true;
       if (!a.startsWith('-')) files.push(a);
     }
     const content = files.length > 0 ? files.map(f => this.fs.readFile(f)).join('\n') : stdin;
@@ -3911,9 +4117,9 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
     let chars = false;
     const files = [];
     for (const a of args) {
-      if (a === '--lines' || (a.startsWith('-') && a.includes('l'))) lines = true;
-      if (a === '--words' || (a.startsWith('-') && a.includes('w'))) words = true;
-      if (a === '--bytes' || a === '--chars' || (a.startsWith('-') && (a.includes('c') || a.includes('m')))) chars = true;
+      if (a === '--lines' || (a.startsWith('-') && !a.startsWith('--') && a.includes('l'))) lines = true;
+      if (a === '--words' || (a.startsWith('-') && !a.startsWith('--') && a.includes('w'))) words = true;
+      if (a === '--bytes' || a === '--chars' || (a.startsWith('-') && !a.startsWith('--') && (a.includes('c') || a.includes('m')))) chars = true;
       if (!a.startsWith('-')) files.push(a);
     }
 
@@ -4099,8 +4305,16 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
     const applyNode = (node) => {
       if (!node) return;
-      node.permissions = this.fs.computePermissions(node.permissions, mode);
-      node.ctime = Date.now();
+      const newPerm = this.fs.computePermissions(node.permissions, mode);
+      const now = Date.now();
+      node.permissions = newPerm;
+      node.ctime = now;
+      if (node.inode && node.links > 1) {
+        this.fs.syncInodeNodes(node.inode, (linked) => {
+          linked.permissions = newPerm;
+          linked.ctime = now;
+        });
+      }
       if (recursive && node.type === 'directory' && node.children) {
         for (const child of Object.values(node.children)) {
           applyNode(child);
@@ -4156,9 +4370,17 @@ Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds`,
 
     const applyNode = (node) => {
       if (!node) return;
+      const now = Date.now();
       if (owner) node.owner = owner;
       if (group) node.group = group;
-      node.ctime = Date.now();
+      node.ctime = now;
+      if (node.inode && node.links > 1) {
+        this.fs.syncInodeNodes(node.inode, (linked) => {
+          if (owner) linked.owner = owner;
+          if (group) linked.group = group;
+          linked.ctime = now;
+        });
+      }
       if (recursive && node.type === 'directory' && node.children) {
         for (const child of Object.values(node.children)) {
           applyNode(child);
@@ -4230,13 +4452,35 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
   }
 
   cmdLn(args) {
-    const isSymlink = args.includes('-s') || args.includes('--symbolic');
+    const hasShortOrLong = (ch, longFlag) =>
+      args.some(a => a === longFlag || (a.startsWith('-') && !a.startsWith('--') && a.includes(ch)));
+    const isSymlink = hasShortOrLong('s', '--symbolic');
+    const isForce = hasShortOrLong('f', '--force');
     const paths = args.filter(a => !a.startsWith('-'));
     if (paths.length < 2) throw new Error('ln: operando de arquivo ausente');
+
+    let destPath = paths[1];
+    const destNode = this.fs.getNode(destPath);
+    if (destNode && destNode.type === 'directory') {
+      const base = this.fs.getFileName(paths[0]);
+      destPath = `${this.fs.resolvePath(destPath).replace(/\/$/, '')}/${base}`;
+    }
+
+    const existing = this.fs.getRawNode(destPath);
+    if (existing) {
+      if (!isForce) {
+        throw new Error(`ln: falha ao criar link '${destPath}': Arquivo já existe`);
+      }
+      if (existing.type === 'directory') {
+        throw new Error(`ln: '${destPath}': impossível sobrescrever diretório`);
+      }
+      this.fs.removeFile(destPath, true);
+    }
+
     if (isSymlink) {
-      this.fs.createSymlink(paths[0], paths[1]);
+      this.fs.createSymlink(paths[0], destPath);
     } else {
-      this.fs.createHardlink(paths[0], paths[1]);
+      this.fs.createHardlink(paths[0], destPath);
     }
     return { output: '', code: 0 };
   }
@@ -4254,11 +4498,25 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
       const a = args[i];
       if ((a === '-C' || a === '--directory') && args[i + 1]) {
         extractDir = args[++i];
+      } else if (a.startsWith('--directory=')) {
+        extractDir = a.slice(12);
       } else if (a === '-f' || a === '--file') {
         if (args[i + 1]) tarName = args[++i];
+      } else if (a.startsWith('--file=')) {
+        tarName = a.slice(7);
+      } else if (a === '--create') {
+        isCreate = true;
+      } else if (a === '--extract' || a === '--get') {
+        isExtract = true;
+      } else if (a === '--list') {
+        isList = true;
+      } else if (a === '--verbose') {
+        isVerbose = true;
+      } else if (a === '--gzip' || a === '--gunzip') {
+        continue;
       } else if (a.startsWith('-f') && a.length > 2) {
         tarName = a.slice(2);
-      } else if (a.startsWith('-') || (i === 0 && /^[cxtvzfjp]+$/.test(a))) {
+      } else if ((a.startsWith('-') && !a.startsWith('--')) || (i === 0 && /^[cxtvzfjp]+$/.test(a))) {
         if (a.includes('c')) isCreate = true;
         if (a.includes('x')) isExtract = true;
         if (a.includes('t')) isList = true;
@@ -4266,7 +4524,7 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
         if (a.includes('f') && args[i + 1] && !args[i + 1].startsWith('-')) {
           tarName = args[++i];
         }
-      } else {
+      } else if (!a.startsWith('--')) {
         cleanArgs.push(a);
       }
     }
@@ -4486,38 +4744,73 @@ MiB Mem :   3920.0 total,   1250.4 free,    850.2 used,   1819.4 buff/cache
   }
 
   cmdDf(args) {
-    const showType = args.some(a => a === '-T' || (a.startsWith('-') && a.includes('T')));
-    const showInodes = args.some(a => a === '-i' || (a.startsWith('-') && a.includes('i')));
+    const showType = args.some(a => a === '-T' || a === '--print-type' || (a.startsWith('-') && !a.startsWith('--') && a.includes('T')));
+    const showInodes = args.some(a => a === '-i' || a === '--inodes' || (a.startsWith('-') && !a.startsWith('--') && a.includes('i')));
+    const targets = args.filter(a => !a.startsWith('-'));
+
+    const mounts = [
+      {
+        mount: '/',
+        fs: '/dev/sda1',
+        type: 'ext4',
+        hRow: '/dev/sda1        50G   12G   38G  24% /',
+        tRow: '/dev/sda1      ext4      50G   12G   38G  24% /',
+        iRow: '/dev/sda1      3276800  142510  3134290    5% /'
+      },
+      {
+        mount: '/tmp',
+        fs: 'tmpfs',
+        type: 'tmpfs',
+        hRow: 'tmpfs           2.0G  4.0K  2.0G   1% /tmp',
+        tRow: 'tmpfs          tmpfs    2.0G  4.0K  2.0G   1% /tmp',
+        iRow: 'tmpfs           512000      18   511982    1% /tmp'
+      },
+      {
+        mount: '/dev',
+        fs: 'udev',
+        type: 'devtmpfs',
+        hRow: 'udev            2.0G     0  2.0G   0% /dev',
+        tRow: 'udev           devtmpfs 2.0G     0  2.0G   0% /dev',
+        iRow: 'udev            512000     380   511620    1% /dev'
+      }
+    ];
+
+    let selectedMounts = mounts;
+    if (targets.length > 0) {
+      const mountKeys = [];
+      for (const t of targets) {
+        const resolved = this.fs.resolvePath(t);
+        if (!this.fs.getNode(resolved)) {
+          throw new Error(`df: ${t}: Arquivo ou diretório não encontrado`);
+        }
+        if (resolved === '/tmp' || resolved.startsWith('/tmp/')) mountKeys.push('/tmp');
+        else if (resolved === '/dev' || resolved.startsWith('/dev/')) mountKeys.push('/dev');
+        else mountKeys.push('/');
+      }
+      selectedMounts = mounts.filter(m => mountKeys.includes(m.mount));
+    }
+
     if (showInodes) {
       return {
-        output: `Sist. Arq.      Inodes IUsados  ILivres IUso% Montado em
-/dev/sda1      3276800  142510  3134290    5% /
-tmpfs           512000      18   511982    1% /tmp
-udev            512000     380   511620    1% /dev`,
+        output: ['Sist. Arq.      Inodes IUsados  ILivres IUso% Montado em', ...selectedMounts.map(m => m.iRow)].join('\n'),
         code: 0
       };
     }
     if (showType) {
       return {
-        output: `Sist. Arq.     Tipo     Tam. Usado Disp. Uso% Montado em
-/dev/sda1      ext4      50G   12G   38G  24% /
-tmpfs          tmpfs    2.0G  4.0K  2.0G   1% /tmp
-udev           devtmpfs 2.0G     0  2.0G   0% /dev`,
+        output: ['Sist. Arq.     Tipo     Tam. Usado Disp. Uso% Montado em', ...selectedMounts.map(m => m.tRow)].join('\n'),
         code: 0
       };
     }
     return {
-      output: `Sist. Arq.      Tam. Usado Disp. Uso% Montado em
-/dev/sda1        50G   12G   38G  24% /
-tmpfs           2.0G  4.0K  2.0G   1% /tmp
-udev            2.0G     0  2.0G   0% /dev`,
+      output: ['Sist. Arq.      Tam. Usado Disp. Uso% Montado em', ...selectedMounts.map(m => m.hRow)].join('\n'),
       code: 0
     };
   }
 
   cmdDu(args) {
-    const h = args.some(a => a === '--human-readable' || (a.startsWith('-') && a.includes('h')));
-    const summaryOnly = args.some(a => a === '--summarize' || (a.startsWith('-') && a.includes('s')));
+    const h = args.some(a => a === '--human-readable' || (a.startsWith('-') && !a.startsWith('--') && a.includes('h')));
+    const summaryOnly = args.some(a => a === '--summarize' || (a.startsWith('-') && !a.startsWith('--') && a.includes('s')));
     const targets = args.filter(a => !a.startsWith('-'));
 
     const formatKB = (kb) => (h ? `${kb}.0K` : String(kb));
@@ -4552,7 +4845,7 @@ ${h ? '24K' : '24'}\t.`,
 
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
-      if (a === '-i' || a.startsWith('-i')) inPlace = true;
+      if (a === '-i' || a === '--in-place' || a.startsWith('--in-place=') || (a.startsWith('-i') && !a.startsWith('--'))) inPlace = true;
       else if (a === '-n' || a === '--quiet' || a === '--silent') quiet = true;
       else if (a === '-e' && args[i + 1]) scripts.push(args[++i]);
       else if (!a.startsWith('-')) {
@@ -5007,11 +5300,11 @@ ${h ? '24K' : '24'}\t.`,
     return { output: args.length > 0 ? `${target} : ${foundGroups.join(' ')}` : foundGroups.join(' '), code: 0 };
   }
 
-  cmdUseradd(args) {
+  cmdUseradd(args, defaultCreateHome = false) {
     if (!this.fs.sudoMode) {
       return { output: 'useradd: Permissão negada.\nuseradd: não foi possível travar /etc/passwd; tente novamente com sudo.', code: 1, type: 'error' };
     }
-    let createHome = false;
+    let createHome = defaultCreateHome;
     let shell = '/bin/bash';
     let homeDir = null;
     let uidOpt = null;
@@ -5279,6 +5572,8 @@ sda      8:0    0   52G  0 disk
   }
 
   cmdSystemctl(args) {
+    const isQuiet = args.includes('--quiet') || args.includes('-q');
+    const hasNow = args.includes('--now');
     const clean = args.filter(a => !a.startsWith('-'));
     const action = clean[0] || 'list-units';
     const targetName = (clean[1] || '').replace(/\.service$/, '');
@@ -5306,10 +5601,10 @@ sda      8:0    0   52G  0 disk
     }
 
     if (action === 'is-active') {
-      return { output: svc.active ? 'active' : 'inactive', code: svc.active ? 0 : 3 };
+      return { output: isQuiet ? '' : (svc.active ? 'active' : 'inactive'), code: svc.active ? 0 : 3 };
     }
     if (action === 'is-enabled') {
-      return { output: svc.enabled ? 'enabled' : 'disabled', code: svc.enabled ? 0 : 1 };
+      return { output: isQuiet ? '' : (svc.enabled ? 'enabled' : 'disabled'), code: svc.enabled ? 0 : 1 };
     }
     if (action === 'status') {
       const dot = svc.active ? '●' : '○';
@@ -5331,6 +5626,22 @@ Jan 15 07:31:02 penguin-gym systemd[1]: Started ${targetName}.service - ${svc.de
       };
     }
 
+    const markActive = () => {
+      svc.active = true;
+      if (serviceKey === 'nginx') {
+        this.killedProcesses.delete('123');
+        this.killedProcesses.delete('124');
+      } else if (serviceKey === 'ssh') {
+        this.killedProcesses.delete('88');
+      } else if (serviceKey === 'cron') {
+        this.killedProcesses.delete('74');
+      } else if (serviceKey === 'docker') {
+        this.killedProcesses.delete('210');
+      } else if (serviceKey === 'postgresql') {
+        this.killedProcesses.delete('280');
+      }
+    };
+
     if (['start', 'stop', 'restart', 'reload', 'enable', 'disable'].includes(action)) {
       if (!this.fs.sudoMode) {
         return {
@@ -5340,26 +5651,16 @@ Jan 15 07:31:02 penguin-gym systemd[1]: Started ${targetName}.service - ${svc.de
         };
       }
       if (action === 'start' || action === 'restart' || action === 'reload') {
-        svc.active = true;
-        if (serviceKey === 'nginx') {
-          this.killedProcesses.delete('123');
-          this.killedProcesses.delete('124');
-        } else if (serviceKey === 'ssh') {
-          this.killedProcesses.delete('88');
-        } else if (serviceKey === 'cron') {
-          this.killedProcesses.delete('74');
-        } else if (serviceKey === 'docker') {
-          this.killedProcesses.delete('210');
-        } else if (serviceKey === 'postgresql') {
-          this.killedProcesses.delete('280');
-        }
+        markActive();
       } else if (action === 'stop') {
         svc.active = false;
       } else if (action === 'enable') {
         svc.enabled = true;
+        if (hasNow) markActive();
         return { output: `Created symlink /etc/systemd/system/multi-user.target.wants/${targetName}.service → /lib/systemd/system/${targetName}.service.`, code: 0 };
       } else if (action === 'disable') {
         svc.enabled = false;
+        if (hasNow) svc.active = false;
         return { output: `Removed "/etc/systemd/system/multi-user.target.wants/${targetName}.service".`, code: 0 };
       }
       return { output: '', code: 0 };
@@ -6130,9 +6431,11 @@ Address: 93.184.216.34`,
         }
         return { output: `ERROR: Invalid rule number '${args[1]}'`, code: 1, type: 'error' };
       }
-      const targetPort = args[2] || args[1];
+      const targetPort = (args[2] || args[1]).trim();
       const before = this.ufwState.rules.length;
-      this.ufwState.rules = this.ufwState.rules.filter(r => !r.trim().startsWith(targetPort));
+      const esc = targetPort.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const portRe = new RegExp(`^${esc}(?:/|\\s|$)`, 'i');
+      this.ufwState.rules = this.ufwState.rules.filter(r => !portRe.test(r.trim()));
       if (this.ufwState.rules.length < before) {
         return { output: 'Rule deleted\nRule deleted (v6)', code: 0 };
       }
@@ -6186,6 +6489,7 @@ Address: 93.184.216.34`,
   }
 
   cmdJq(args, stdin) {
+    const rawOutput = args.includes('-r') || args.includes('--raw-output');
     const clean = args.filter(a => !a.startsWith('-'));
     let filter = clean[0] || '.';
     let file = clean[1];
@@ -6205,6 +6509,9 @@ Address: 93.184.216.34`,
         val = (val !== null && val !== undefined) ? val[k] : undefined;
       }
       if (val === undefined) val = null;
+      if (typeof val === 'string') {
+        return { output: rawOutput ? val : JSON.stringify(val), code: 0 };
+      }
       return { output: typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val), code: 0 };
     } catch {
       return { output: 'jq: parse error: Invalid JSON literal', code: 4, type: 'error' };
